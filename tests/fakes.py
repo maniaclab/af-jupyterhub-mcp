@@ -114,6 +114,9 @@ class FakeHub:
     )
     # When true, the progress stream sends keepalives forever (spawn hangs).
     progress_hangs: bool = False
+    # When true, the progress stream closes after progress_events, sending
+    # neither ready nor failed.
+    progress_ends_early: bool = False
     # Force GET /hub/api/user to fail with this status (e.g. 500).
     whoami_status: int | None = None
     # Optional ASGI app standing in for every notebook's /mcp endpoint.
@@ -242,6 +245,8 @@ class FakeHub:
             if event.get("failed"):
                 model.update(ready=False, pending=None, stopped=True)
                 return
+        if self.progress_ends_early:
+            return
         while self.progress_hangs:
             await anyio.sleep(0.01)
             yield b"\n\n"
