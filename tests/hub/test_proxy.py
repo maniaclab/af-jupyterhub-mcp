@@ -7,8 +7,6 @@ MCP handshake and tool call run for real; only the network is in-memory.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import httpx2
 import pytest
 
@@ -18,22 +16,7 @@ from af_jupyterhub_mcp.hub.proxy import (
     NotebookToolUpstreamError,
     call_notebook_tool,
 )
-from tests.fakes import ALICE_TOKEN, BOB_TOKEN, HUB_URL, FakeHub, make_notebook_app
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-
-
-@pytest.fixture
-def fake_hub() -> FakeHub:
-    return FakeHub(notebook_app=make_notebook_app)
-
-
-@pytest.fixture
-async def hub(fake_hub: FakeHub) -> AsyncIterator[HubClient]:
-    client = HubClient(HUB_URL, transport=fake_hub.transport())
-    yield client
-    await client.aclose()
+from tests.fakes import ALICE_TOKEN, BOB_TOKEN, HUB_URL, FakeHub
 
 
 async def _call(

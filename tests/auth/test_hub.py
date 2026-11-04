@@ -16,11 +16,10 @@ from af_jupyterhub_mcp.auth.hub import (
     get_hub_identity,
     missing_scopes,
 )
-from af_jupyterhub_mcp.hub.client import HubClient
-from tests.fakes import ALICE_TOKEN, HUB_URL, FakeHub
+from tests.fakes import ALICE_TOKEN, FakeHub
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from af_jupyterhub_mcp.hub.client import HubClient
 
 
 class _Clock:
@@ -29,18 +28,6 @@ class _Clock:
 
     def __call__(self) -> float:
         return self.now
-
-
-@pytest.fixture
-def fake_hub() -> FakeHub:
-    return FakeHub()
-
-
-@pytest.fixture
-async def hub(fake_hub: FakeHub) -> AsyncIterator[HubClient]:
-    client = HubClient(HUB_URL, transport=fake_hub.transport())
-    yield client
-    await client.aclose()
 
 
 @pytest.fixture

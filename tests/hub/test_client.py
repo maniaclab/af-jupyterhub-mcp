@@ -16,18 +16,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 
-@pytest.fixture
-def fake_hub() -> FakeHub:
-    return FakeHub()
-
-
-@pytest.fixture
-async def hub(fake_hub: FakeHub) -> AsyncIterator[HubClient]:
-    client = HubClient(HUB_URL, transport=fake_hub.transport())
-    yield client
-    await client.aclose()
-
-
 async def _lines(*lines: str) -> AsyncIterator[str]:
     for line in lines:
         yield line

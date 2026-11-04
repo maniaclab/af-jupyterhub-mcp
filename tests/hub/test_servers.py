@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from af_jupyterhub_mcp.config import Settings
-from af_jupyterhub_mcp.hub.client import HubClient
 from af_jupyterhub_mcp.hub.errors import (
     GuardrailError,
     HubAPIError,
@@ -29,7 +28,7 @@ from af_jupyterhub_mcp.hub.servers import (
 from tests.fakes import ALICE_TOKEN, HUB_URL, FakeHub, server_model
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from af_jupyterhub_mcp.hub.client import HubClient
 
 _CPU = "hub.opensciencegrid.org/usatlas/ml-platform-cpu:latest"
 _GPU = "hub.opensciencegrid.org/usatlas/ml-platform-gpu:latest"
@@ -247,18 +246,6 @@ class TestSummaries:
         assert find_server(user, "nb-1") is nb1
         assert find_server(user, "nb-2") is None
         assert find_server({"name": "alice"}, "nb-1") is None
-
-
-@pytest.fixture
-def fake_hub() -> FakeHub:
-    return FakeHub()
-
-
-@pytest.fixture
-async def hub(fake_hub: FakeHub) -> AsyncIterator[HubClient]:
-    client = HubClient(HUB_URL, transport=fake_hub.transport())
-    yield client
-    await client.aclose()
 
 
 class TestFollowSpawn:
