@@ -120,8 +120,9 @@ class FakeHub:
     # When true, the progress stream closes after progress_events, sending
     # neither ready nor failed.
     progress_ends_early: bool = False
-    # Force GET /hub/api/user to fail with this status (e.g. 500).
-    whoami_status: int | None = None
+    # Force authenticated requests to these paths (exact, or as a "/"
+    # prefix) to fail with the given status, e.g. {"/hub/api/user": 500}.
+    fail_paths: dict[str, int] = field(default_factory=dict)
     # Optional factory for the ASGI app standing in for every notebook's /mcp
     # endpoint (see make_notebook_app). A fresh app per request, because an
     # mcp session manager's lifespan can only run once.
@@ -166,10 +167,11 @@ class FakeHub:
         if owner is None:
             return _error(403, "Missing or invalid credentials.")
         user, scopes = owner
+        for failing, status in self.fail_paths.items():
+            if path == failing or path.startswith(f"{failing}/"):
+                return _error(status, "hub is unhappy")
 
         if path == "/hub/api/user" and request.method == "GET":
-            if self.whoami_status is not None:
-                return _error(self.whoami_status, "hub is unhappy")
             return httpx2.Response(
                 200,
                 json={

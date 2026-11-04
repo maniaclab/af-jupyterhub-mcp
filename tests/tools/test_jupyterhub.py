@@ -460,3 +460,61 @@ class TestStaticListings:
         result = await tools["list_sites"](ctx=make_ctx())
         assert result.structured_content == {"sites": ["local", "ssl"]}
         assert "- ssl" in tool_text(result)
+
+
+_HUB_CALLING: list[tuple[str, dict[str, Any], str]] = [
+    ("create_jupyter_server", {"image": CPU_IMAGE}, "/hub/api/users/alice"),
+    ("list_jupyter_servers", {}, "/hub/api/users/alice"),
+    ("get_jupyter_server", {"name": "nb"}, "/hub/api/users/alice"),
+    ("stop_jupyter_server", {"name": "nb"}, "/hub/api/users/alice/servers"),
+    ("delete_jupyter_server", {"name": "nb"}, "/hub/api/users/alice/servers"),
+]
+
+
+class TestHubFailuresAreFormatted:
+    @pytest.mark.parametrize(("tool", "args", "path"), _HUB_CALLING)
+    async def test_expired_link_asks_to_relink(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        tool_text: Callable[[CallToolResult], str],
+        tool: str,
+        args: dict[str, Any],
+        path: str,
+    ) -> None:
+        assert path
+        result = await tools[tool](**args, ctx=make_ctx(token="expired"))
+        assert result.is_error is True
+        assert "re-link" in tool_text(result).lower()
+
+    @pytest.mark.parametrize(("tool", "args", "path"), _HUB_CALLING)
+    async def test_hub_server_error_is_surfaced(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        fake_hub: FakeHub,
+        tool_text: Callable[[CallToolResult], str],
+        tool: str,
+        args: dict[str, Any],
+        path: str,
+    ) -> None:
+        fake_hub.fail_paths[path] = 500
+        result = await tools[tool](**args, ctx=make_ctx())
+        assert result.is_error is True
+        assert "JupyterHub returned 500: hub is unhappy" in tool_text(result)
+
+    @pytest.mark.parametrize(("tool", "args", "path"), _HUB_CALLING)
+    async def test_hub_forbidden_asks_to_relink(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        fake_hub: FakeHub,
+        tool_text: Callable[[CallToolResult], str],
+        tool: str,
+        args: dict[str, Any],
+        path: str,
+    ) -> None:
+        fake_hub.fail_paths[path] = 403
+        result = await tools[tool](**args, ctx=make_ctx())
+        assert result.is_error is True
+        assert "Re-link" in tool_text(result)

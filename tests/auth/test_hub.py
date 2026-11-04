@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+import httpx2
 import pytest
 
 from af_jupyterhub_mcp.auth.hub import (
@@ -16,10 +16,8 @@ from af_jupyterhub_mcp.auth.hub import (
     get_hub_identity,
     missing_scopes,
 )
-from tests.fakes import ALICE_TOKEN, FakeHub
-
-if TYPE_CHECKING:
-    from af_jupyterhub_mcp.hub.client import HubClient
+from af_jupyterhub_mcp.hub.client import HubClient
+from tests.fakes import ALICE_TOKEN, HUB_URL, FakeHub
 
 
 class _Clock:
@@ -109,7 +107,7 @@ class TestVerifyToken:
         fake_hub: FakeHub,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        fake_hub.whoami_status = 500
+        fake_hub.fail_paths["/hub/api/user"] = 500
         with caplog.at_level(logging.WARNING, logger="af_jupyterhub_mcp.auth.hub"):
             assert await verifier.verify_token(ALICE_TOKEN) is None
         assert "500" in caplog.text
@@ -134,10 +132,31 @@ class TestVerifyToken:
     async def test_rejections_are_not_cached(
         self, verifier: HubTokenVerifier, fake_hub: FakeHub
     ) -> None:
-        fake_hub.whoami_status = 500
+        fake_hub.fail_paths["/hub/api/user"] = 500
         assert await verifier.verify_token(ALICE_TOKEN) is None
-        fake_hub.whoami_status = None
+        fake_hub.fail_paths.clear()
         assert await verifier.verify_token(ALICE_TOKEN) is not None
+
+    async def test_non_user_token_is_rejected(
+        self,
+        verifier: HubTokenVerifier,
+        fake_hub: FakeHub,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        async def service_whoami(request: httpx2.Request) -> httpx2.Response:
+            if request.url.path == "/hub/api/user":
+                return httpx2.Response(200, json={"kind": "service", "name": "binder"})
+            return await fake_hub.handle(request)
+
+        hub = HubClient(HUB_URL, transport=httpx2.MockTransport(service_whoami))
+        try:
+            service_verifier = HubTokenVerifier(hub, ttl_seconds=60)
+            with caplog.at_level(logging.WARNING, logger="af_jupyterhub_mcp.auth.hub"):
+                assert await service_verifier.verify_token(ALICE_TOKEN) is None
+        finally:
+            await hub.aclose()
+        assert "does not belong to a user" in caplog.text
+        assert verifier._cache == {}
 
     async def test_cache_never_stores_the_raw_token(
         self, verifier: HubTokenVerifier

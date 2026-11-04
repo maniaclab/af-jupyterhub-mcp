@@ -102,6 +102,48 @@ class TestGetSelf:
         assert "Bad Gateway" in str(excinfo.value)
 
 
+class TestMalformedResponses:
+    @pytest.mark.parametrize(
+        "response",
+        [
+            pytest.param(httpx2.Response(200, text="<html>"), id="not-json"),
+            pytest.param(httpx2.Response(200, json=["a"]), id="not-an-object"),
+        ],
+    )
+    async def test_malformed_2xx_body_is_a_hub_api_error(
+        self, response: httpx2.Response
+    ) -> None:
+        client = HubClient(HUB_URL, transport=httpx2.MockTransport(lambda _r: response))
+        try:
+            with pytest.raises(HubAPIError, match="malformed") as excinfo:
+                await client.get_self(ALICE_TOKEN)
+        finally:
+            await client.aclose()
+        assert excinfo.value.status is None
+
+    async def test_unknown_error_status(self) -> None:
+        client = HubClient(
+            HUB_URL, transport=httpx2.MockTransport(lambda _r: httpx2.Response(599))
+        )
+        try:
+            with pytest.raises(HubAPIError, match="599: Unknown Error"):
+                await client.get_self(ALICE_TOKEN)
+        finally:
+            await client.aclose()
+
+    async def test_progress_stream_transport_failure(self) -> None:
+        def boom(request: httpx2.Request) -> httpx2.Response:
+            msg = "reset by peer"
+            raise httpx2.ReadError(msg, request=request)
+
+        client = HubClient(HUB_URL, transport=httpx2.MockTransport(boom))
+        try:
+            with pytest.raises(HubRequestError, match="reset by peer"):
+                _ = [e async for e in client.progress_events(ALICE_TOKEN, "a", "b")]
+        finally:
+            await client.aclose()
+
+
 class TestGetUser:
     async def test_includes_stopped_servers(
         self, hub: HubClient, fake_hub: FakeHub
