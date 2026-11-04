@@ -29,9 +29,12 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 import httpx2
+from mcp.server.mcpserver import MCPServer
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Callable
+
+    from starlette.applications import Starlette
 
 HUB_URL = "https://hub.example.org"
 
@@ -119,8 +122,10 @@ class FakeHub:
     progress_ends_early: bool = False
     # Force GET /hub/api/user to fail with this status (e.g. 500).
     whoami_status: int | None = None
-    # Optional ASGI app standing in for every notebook's /mcp endpoint.
-    notebook_app: Any = None
+    # Optional factory for the ASGI app standing in for every notebook's /mcp
+    # endpoint (see make_notebook_app). A fresh app per request, because an
+    # mcp session manager's lifespan can only run once.
+    notebook_app: Callable[[], Starlette] | None = None
     requests: list[httpx2.Request] = field(default_factory=list)
 
     def transport(self) -> httpx2.MockTransport:
@@ -292,5 +297,46 @@ class FakeHub:
             headers=request.headers,
             content=request.content,
         )
-        transport = httpx2.ASGITransport(app=self.notebook_app)
-        return await transport.handle_async_request(forwarded)
+        app = self.notebook_app()
+        async with app.router.lifespan_context(app):
+            # ASGITransport buffers the whole response, so the app is done
+            # with the request before its lifespan exits.
+            response = await httpx2.ASGITransport(app=app).handle_async_request(
+                forwarded
+            )
+            await response.aread()
+        return response
+
+
+def make_notebook_app() -> Starlette:
+    """Return an ASGI app standing in for a notebook's jupyter-mcp-server.
+
+    A real mcp-SDK server (stateless, JSON responses, like jupyter-mcp-server
+    runs), exposing a few tools with the upstream names: ``list_files`` and
+    ``execute_code`` echo their arguments, ``fail`` raises so the SDK reports
+    a tool-level error. ``FakeHub`` runs the app's lifespan around each
+    request it forwards.
+    """
+    notebook = MCPServer("fake-jupyter-mcp-server")
+
+    @notebook.tool()
+    def list_files(path: str = "", max_depth: int = 1) -> str:
+        return f"files in {path!r} (depth {max_depth})"
+
+    @notebook.tool()
+    def execute_code(code: str, timeout: int = 30) -> str:
+        return f"ran {code!r} (timeout {timeout})"
+
+    @notebook.tool()
+    def fail() -> str:
+        msg = "kernel exploded"
+        raise RuntimeError(msg)
+
+    return notebook.streamable_http_app(
+        streamable_http_path="/mcp",
+        json_response=True,
+        stateless_http=True,
+        # A non-localhost bind host turns off the SDK's localhost-only Host
+        # header check, which would reject requests addressed to HUB_URL.
+        host="0.0.0.0",
+    )
