@@ -135,6 +135,7 @@ class TestCreateJupyterServer:
         assert _posts(fake_hub) == [
             {
                 "image": GPU_IMAGE,
+                "launched_by": "af-mcp-platform",
                 "resource_requests": {
                     "site": "ssl",
                     "cpu": "4",
