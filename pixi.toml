@@ -1,0 +1,112 @@
+[workspace]
+authors = ["Giordon Stark <kratsg@gmail.com>"]
+name = "af-jupyterhub-mcp"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+preview = ["pixi-build"]
+
+[dependencies]
+af-jupyterhub-mcp = { path = "./" }
+setuptools = "*"
+
+[package]
+name = "af-jupyterhub-mcp"
+version = "latest"
+
+[package.build]
+backend = { name = "pixi-build-python", version = "*" }
+config = { noarch = true }
+
+[package.host-dependencies]
+python = ">=3.10"
+uv = "*"
+hatchling = ">=1.25"
+hatch-vcs = ">=0.4"
+
+[package.run-dependencies]
+mcp = ">=2.0.0,<3"
+httpx2 = ">=2.5.0"
+anyio = ">=4.9"
+
+[feature.py310.dependencies]
+python = "<3.11,>=3.10"
+
+[feature.py311.dependencies]
+python = "<3.12,>=3.11"
+
+[feature.py312.dependencies]
+python = "<3.13,>=3.12"
+
+[feature.py313.dependencies]
+python = "<3.14,>=3.13"
+
+[feature.py314.dependencies]
+python = "<3.15,>=3.14"
+
+[feature.test.dependencies]
+pytest = ">=9"
+pytest-cov = ">=3"
+pytest-asyncio = ">=0.24"
+
+[feature.test.tasks]
+test = { cmd = "pytest -m 'not e2e'", description = "Run unit and integration tests (skip e2e)" }
+test-cov = { cmd = "pytest -m 'not e2e' --cov=af_jupyterhub_mcp --cov-report=term --cov-report=html", description = "Run unit and integration tests with coverage" }
+test-e2e = { cmd = "pytest -m e2e", description = "Run e2e tests against the live hub (needs AF_JUPYTERHUB_E2E_TOKEN)" }
+test-all = { cmd = "pytest --cov=af_jupyterhub_mcp", description = "Run all tests with coverage (e2e skip themselves without a token)" }
+
+[feature.helm.dependencies]
+kubernetes-helm = "*"
+
+[feature.helm.tasks]
+helm-lint = { cmd = """
+helm lint charts/af-jupyterhub-mcp \
+&& helm template shared charts/af-jupyterhub-mcp > /dev/null \
+&& helm template shared charts/af-jupyterhub-mcp --set ingress.enabled=true --set ingress.host=mcp.example.com > /dev/null
+""", description = "Lint the af-jupyterhub-mcp Helm chart and smoke-render it" }
+helm-template = { cmd = "helm template a charts/af-jupyterhub-mcp", description = "Render the chart with default values" }
+
+[feature.docs.dependencies]
+zensical = "*"
+lychee = "*"
+pydocstyle = "*"
+
+[feature.docs.tasks]
+docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/", "zensical.toml"], outputs = ["site"] }
+docs-linkcheck = { cmd = "lychee docs/", description = "Check documentation for broken links" }
+docs-serve = { cmd = "zensical serve", depends-on = ["docs-build"], description = "Build and serve documentation" }
+docs-clean = { cmd = "rm -rf site", description = "Clean documentation build artifacts", inputs = ["site"] }
+check-docstrings = { cmd = "pydocstyle --add-ignore=D104,D105,D107 src/af_jupyterhub_mcp/", description = "Check docstring style" }
+
+[feature.dev.dependencies]
+prek = "*"
+identify = ">=1.4.20"
+pylint = ">=3.2"
+tbump = ">=6.7.0"
+mypy = "*"
+ruff = "*"
+python-build = "*"
+twine = "*"
+
+[feature.dev.tasks]
+pre-commit = { cmd = "prek run --all-files", description = "Run pre-commit hooks on all files" }
+pylint = { cmd = "pylint af_jupyterhub_mcp", description = "Run PyLint on af-jupyterhub-mcp package" }
+pre-commit-install = { cmd = "prek install", description = "Install pre-commit git hooks" }
+pre-commit-update = { cmd = "prek update", description = "Update pre-commit hook versions" }
+build-clean = { cmd = "rm -rf build dist", description = "Clean build artifacts" }
+build = { cmd = "python -m build", depends-on = ["build-clean"], description = "Build SDist and wheel distributions", outputs = ["dist"] }
+build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], description = "Run twine to check" }
+
+[environments]
+docs = ["docs"]
+dev = ["dev"]
+helm = { features = ["helm"], no-default-feature = true }
+py310 = ["test", "py310"]
+py311 = ["test", "py311"]
+py312 = ["test", "py312"]
+py313 = ["test", "py313"]
+py314 = ["test", "py314"]
+
+[tasks]
+lint = { depends-on = ["pre-commit", "pylint"], description = "Run all linting (pre-commit + pylint)" }
+check = { depends-on = ["lint", "test"], description = "Quick check: lint + basic tests" }
+check-all = { depends-on = ["lint", "test-all"], description = "Comprehensive check: lint + all tests" }
