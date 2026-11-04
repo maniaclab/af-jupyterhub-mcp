@@ -1,0 +1,11 @@
+af-jupyterhub-mcp has been installed.
+
+Service:      {{ include "af-jupyterhub-mcp.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+MCP endpoint: http://{{ include "af-jupyterhub-mcp.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/mcp
+Health check: http://{{ include "af-jupyterhub-mcp.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/healthz
+JupyterHub (API):   {{ .Values.hub.url }}
+JupyterHub (links): {{ .Values.hub.publicUrl | default .Values.hub.url }}
+
+Wire this backend into af-mcp-platform's aggregator with auth_type: bearer,
+fed by the linked JupyterHub account (oauth21-direct provider, client
+service-af-mcp-platform) -- see charts/af-jupyterhub-mcp/README.md.
