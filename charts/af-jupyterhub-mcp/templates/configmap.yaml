@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "af-jupyterhub-mcp.fullname" . }}-pixi
+  labels:
+    {{- include "af-jupyterhub-mcp.labels" . | nindent 4 }}
+data:
+  pixi.toml: |
+    [workspace]
+    channels = ["conda-forge"]
+    name = "af-jupyterhub-mcp"
+    platforms = ["linux-64", "linux-aarch64"]
+    version = "0.1.0"
+
+    [dependencies]
+    af-jupyterhub-mcp = "=={{ .Values.jupyterhubMcp.version }}"
+    {{- range $name, $spec := .Values.jupyterhubMcp.extraPixiDependencies }}
+    {{ $name }} = "{{ $spec }}"
+    {{- end }}
+  {{- if .Values.jupyterhubMcp.pixiLockContent }}
+  pixi.lock: |
+    {{- .Values.jupyterhubMcp.pixiLockContent | nindent 4 }}
+  {{- end }}

@@ -1,0 +1,179 @@
+[build-system]
+requires = ["hatchling>=1.26", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "af-jupyterhub-mcp"
+authors = [
+  { name = "Giordon Stark", email = "kratsg@gmail.com" },
+]
+description = "MCP Server for launching and driving per-user JupyterHub servers on the ATLAS Analysis Facility"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 1 - Planning",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering",
+  "Typing :: Typed",
+]
+dynamic = ["version"]
+dependencies = [
+  "mcp>=2.0.0,<3",
+  "httpx2>=2.5.0",
+  "anyio>=4.9",
+  "exceptiongroup>=1.2; python_version < '3.11'",
+]
+
+[project.scripts]
+af-jupyterhub-mcp = "af_jupyterhub_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/maniaclab/af-jupyterhub-mcp"
+"Bug Tracker" = "https://github.com/maniaclab/af-jupyterhub-mcp/issues"
+
+[dependency-groups]
+test = [
+  "pytest >=9",
+  "pytest-cov >=7",
+  "pytest-asyncio >=0.24",
+]
+dev = [
+  { include-group = "test" },
+]
+
+[tool.hatch]
+version.source = "vcs"
+build.hooks.vcs.version-file = "src/af_jupyterhub_mcp/_version.py"
+
+[tool.hatch.envs.default]
+dependency-groups = ["dev"]
+
+[tool.hatch.envs.hatch-test]
+dependency-groups = ["test"]
+env-vars.PYTHONWARNDEFAULTENCODING = "1"
+
+[tool.pytest]
+minversion = "9.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+strict = true
+filterwarnings = [
+  "error",
+  # anyio's pytest plugin imports _pytest.python.CallSpec2, which pytest >=9.2
+  # deprecates. anyio releases that import CallSpec need Python >=3.11, so the
+  # py310 environment still resolves an anyio that warns at plugin load.
+  "ignore:_pytest\\.python\\.CallSpec2 has been renamed.*:pytest.PytestRemovedIn10Warning",
+]
+log_level = "INFO"
+testpaths = [
+  "tests",
+]
+markers = [
+    "e2e: end-to-end tests against the live JupyterHub (skipped unless AF_JUPYTERHUB_E2E_TOKEN is set)",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage]
+run.source = ["af_jupyterhub_mcp"]
+report.exclude_also = [
+  '\.\.\.',
+  'if typing.TYPE_CHECKING:',
+]
+
+[tool.mypy]
+files = ["src", "tests"]
+mypy_path = ["src"]
+python_version = "3.10"
+warn_unused_configs = true
+strict = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+warn_unreachable = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = "af_jupyterhub_mcp.*"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = ["exceptiongroup.*"]
+ignore_missing_imports = true
+
+[tool.ruff]
+show-fixes = true
+
+[tool.ruff.lint]
+extend-select = [
+  "ARG",
+  "B",
+  "BLE",
+  "C4",
+  "DTZ",
+  "EM",
+  "EXE",
+  "FA",
+  "FLY",
+  "FURB",
+  "G",
+  "I",
+  "ICN",
+  "ISC",
+  "LOG",
+  "NPY",
+  "PD",
+  "PERF",
+  "PGH",
+  "PIE",
+  "PL",
+  "PT",
+  "PTH",
+  "PYI",
+  "Q",
+  "RET",
+  "RSE",
+  "RUF",
+  "SIM",
+  "SLOT",
+  "T10",
+  "T20",
+  "TC",
+  "TRY",
+  "UP",
+  "YTT",
+]
+ignore = [
+  "PLR09",
+  "PLR2004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["T20"]
+
+[tool.pylint]
+py-version = "3.10"
+ignore-paths = [".*/_version.py"]
+reports.output-format = "colorized"
+similarities.ignore-imports = "yes"
+messages_control.disable = [
+  "broad-exception-caught",
+  "design",
+  "duplicate-code",
+  "fixme",
+  "line-too-long",
+  "missing-module-docstring",
+  "missing-function-docstring",
+  "wrong-import-position",
+]

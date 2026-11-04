@@ -1,0 +1,24 @@
+apiVersion: v2
+name: af-jupyterhub-mcp
+description: |
+  MCP server for per-user JupyterHub named servers on the ATLAS Analysis
+  Facility (start/list/get/stop/delete, supported images and sites, plus
+  notebook and JupyterLab UI proxy tools), served over HTTP transport behind
+  af-mcp-platform, which forwards each user's linked JupyterHub token.
+type: application
+# Chart version, kept in lockstep with appVersion by tbump.toml.
+version: 0.0.0
+# af-jupyterhub-mcp release the chart deploys by default (the conda-forge
+# version pinned in values.yaml). Override with jupyterhubMcp.version.
+appVersion: "0.0.0"
+keywords:
+  - jupyterhub
+  - binderhub
+  - mcp
+  - atlas
+home: https://github.com/maniaclab/af-jupyterhub-mcp
+sources:
+  - https://github.com/maniaclab/af-jupyterhub-mcp
+maintainers:
+  - name: Giordon Stark
+    email: kratsg@gmail.com
