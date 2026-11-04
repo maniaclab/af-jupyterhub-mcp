@@ -33,6 +33,7 @@ from af_jupyterhub_mcp.config import (
 from af_jupyterhub_mcp.hub.errors import (
     GuardrailError,
     ImageNotAllowedError,
+    NameConflictError,
     SpawnFailedError,
     SpawnTimeoutError,
 )
@@ -83,6 +84,31 @@ def generate_server_name(existing: Collection[str]) -> str | None:
         if candidate not in existing:
             return candidate
     return None
+
+
+def resolve_server_name(user_model: dict[str, Any], name: str | None) -> str:
+    """Return the server name a create request should use.
+
+    With no *name*, the first free ``notebook-<n>``. A given *name* must be a
+    valid new name; it may be one of the caller's stopped servers (the hub
+    starts that entry again) but not an active one.
+
+    Raises:
+        GuardrailError: *name* is invalid, or no generated name is free.
+        NameConflictError: *name* is one of the caller's active servers.
+    """
+    if name is None:
+        generated = generate_server_name(set(user_model.get("servers") or {}))
+        if generated is None:
+            msg = "no free notebook-<n> server name; pass name explicitly"
+            raise GuardrailError(msg)
+        return generated
+    validate_new_server_name(name)
+    model = find_server(user_model, name)
+    if model is not None and not model.get("stopped"):
+        msg = f"server {name!r} already exists and is not stopped"
+        raise NameConflictError(msg)
+    return name
 
 
 def validate_create_request(

@@ -11,6 +11,7 @@ from af_jupyterhub_mcp.hub.errors import (
     GuardrailError,
     HubAPIError,
     ImageNotAllowedError,
+    NameConflictError,
     SpawnFailedError,
     SpawnTimeoutError,
 )
@@ -20,6 +21,7 @@ from af_jupyterhub_mcp.hub.servers import (
     find_server,
     follow_spawn,
     generate_server_name,
+    resolve_server_name,
     server_status,
     summarize_server,
     validate_create_request,
@@ -79,6 +81,39 @@ class TestServerNames:
     def test_generate_gives_up_when_every_slot_is_taken(self) -> None:
         taken = {f"notebook-{i}" for i in range(1, 200)}
         assert generate_server_name(taken) is None
+
+
+class TestResolveServerName:
+    def _user(self, **servers: dict[str, Any]) -> dict[str, Any]:
+        return {"name": "alice", "servers": servers}
+
+    def test_generates_when_omitted(self) -> None:
+        user = self._user(**{"notebook-1": server_model("alice", "notebook-1")})
+        assert resolve_server_name(user, None) == "notebook-2"
+
+    def test_generation_exhausted(self) -> None:
+        user = self._user(
+            **{
+                f"notebook-{i}": server_model("alice", f"notebook-{i}")
+                for i in range(1, 100)
+            }
+        )
+        with pytest.raises(GuardrailError, match="pass name explicitly"):
+            resolve_server_name(user, None)
+
+    def test_new_name_is_validated(self) -> None:
+        with pytest.raises(GuardrailError, match="server name"):
+            resolve_server_name(self._user(), "Bad_Name")
+
+    def test_stopped_server_name_is_reused(self) -> None:
+        user = self._user(mine=server_model("alice", "mine", ready=False))
+        assert resolve_server_name(user, "mine") == "mine"
+
+    @pytest.mark.parametrize("pending", [None, "spawn"])
+    def test_active_server_name_conflicts(self, pending: str | None) -> None:
+        model = server_model("alice", "mine", ready=pending is None, pending=pending)
+        with pytest.raises(NameConflictError, match="already exists"):
+            resolve_server_name(self._user(mine=model), "mine")
 
 
 class TestValidateCreateRequest:
