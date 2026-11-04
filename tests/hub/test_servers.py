@@ -185,6 +185,7 @@ class TestBuildUserOptions:
         )
         assert options == {
             "image": _CPU,
+            "launched_by": "af-mcp-platform",
             "resource_requests": {
                 "site": "local",
                 "cpu": "2",

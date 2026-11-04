@@ -46,6 +46,7 @@ the BinderHub form sends them:
 ```json
 {
   "image": "hub.opensciencegrid.org/usatlas/ml-platform-cpu:latest",
+  "launched_by": "af-mcp-platform",
   "resource_requests": {
     "site": "local",
     "cpu": "1",
@@ -55,6 +56,11 @@ the BinderHub form sends them:
   }
 }
 ```
+
+`launched_by` marks the server as launched through af-mcp-platform, in the hub's
+records and in the AF spawner's `launched-by` pod label. Servers from the
+BinderHub form carry `binder_request` instead. Anyone can set `user_options`, so
+treat it as bookkeeping, not an access control.
 
 When the hub answers `202` (pending), the tool follows
 `/hub/api/users/<you>/servers/<name>/progress` and forwards each event as an MCP

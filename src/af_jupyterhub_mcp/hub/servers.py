@@ -5,6 +5,7 @@ the AF hub spawner (``binderspawner_mixin.py``) reads when the BinderHub form
 launches one::
 
     {"image": "<image>",
+     "launched_by": "af-mcp-platform",
      "resource_requests": {"site": "<site>", "cpu": "<n>", "memory": "<GB>",
                            "qos": "Guaranteed" | "Burstable",
                            "gpuCount": "<n>", "gpuModel": "<product>"}}
@@ -13,7 +14,10 @@ Values are strings, as the form sends them. ``gpuModel`` is omitted to accept
 any GPU product: the spawner turns any value it is given (other than the
 form's ``"undefined"``) into a ``nvidia.com/gpu.product`` node selector.
 ``qos`` other than ``"Guaranteed"`` leaves the spawner's default (burstable)
-requests and limits in place.
+requests and limits in place. ``launched_by`` records where the launch came
+from, for the hub's records and the spawner's pod labels; BinderHub launches
+carry ``binder_request`` instead. Users can set ``user_options`` themselves,
+so it is bookkeeping, not an access control.
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ if TYPE_CHECKING:
     from af_jupyterhub_mcp.hub.client import HubClient
 
 SERVER_NAME_PREFIX = "notebook"
+LAUNCHED_BY = "af-mcp-platform"
 _MAX_GENERATE_ATTEMPTS = 100
 
 # Names this backend creates: a DNS label (lowercase alphanumerics and '-',
@@ -182,7 +187,11 @@ def build_user_options(
     }
     if gpu_product is not None:
         resource_requests["gpuModel"] = gpu_product
-    return {"image": image, "resource_requests": resource_requests}
+    return {
+        "image": image,
+        "launched_by": LAUNCHED_BY,
+        "resource_requests": resource_requests,
+    }
 
 
 def server_status(model: dict[str, Any]) -> str:
