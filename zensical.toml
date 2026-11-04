@@ -10,6 +10,9 @@ Copyright &copy; 2026 The authors
 
 nav = [
   { "Home" = "index.md" },
+  { "Tools" = "tools.md" },
+  { "Configuration" = "configuration.md" },
+  { "Deployment" = "deployment.md" },
   { "Contributing" = "contributing.md" },
 ]
 
