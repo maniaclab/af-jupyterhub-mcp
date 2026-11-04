@@ -7,10 +7,10 @@ description: |
   af-mcp-platform, which forwards each user's linked JupyterHub token.
 type: application
 # Chart version, kept in lockstep with appVersion by tbump.toml.
-version: 0.0.0
+version: 0.1.0
 # af-jupyterhub-mcp release the chart deploys by default (the conda-forge
 # version pinned in values.yaml). Override with jupyterhubMcp.version.
-appVersion: "0.0.0"
+appVersion: "0.1.0"
 keywords:
   - jupyterhub
   - binderhub
