@@ -70,11 +70,6 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 strict = true
 filterwarnings = [
   "error",
-  # starlette.testclient imports the deprecated anyio.abc.BlockingPortal alias at
-  # module load time, which anyio >=4.15 warns on. Fixed upstream in
-  # https://github.com/Kludex/starlette/pull/3498, but not yet in a starlette
-  # release (latest is 1.6.0, predating that merge) -- remove once it is.
-  "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated.*:DeprecationWarning",
   # anyio's pytest plugin imports _pytest.python.CallSpec2, which pytest >=9.2
   # deprecates. anyio releases that import CallSpec need Python >=3.11, so the
   # py310 environment still resolves an anyio that warns at plugin load.
