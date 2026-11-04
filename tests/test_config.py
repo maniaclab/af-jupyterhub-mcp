@@ -15,6 +15,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Start every test from an environment with no JUPYTERHUB_MCP_* variables."""
     for name in (
         "JUPYTERHUB_MCP_HUB_URL",
+        "JUPYTERHUB_MCP_PUBLIC_HUB_URL",
         "JUPYTERHUB_MCP_CPU_IMAGES",
         "JUPYTERHUB_MCP_GPU_IMAGES",
         "JUPYTERHUB_MCP_IMAGE_TOOL_OVERRIDES",
@@ -87,6 +88,33 @@ class TestFromEnv:
         monkeypatch.setenv(name, raw)
         with pytest.raises(ValueError, match=name):
             Settings.from_env()
+
+
+class TestPublicHubUrl:
+    def test_defaults_to_hub_url(self) -> None:
+        assert Settings().public_url == "https://jupyterhub.af.uchicago.edu"
+        assert Settings(hub_url="http://proxy-public").public_url == (
+            "http://proxy-public"
+        )
+
+    def test_explicit_public_url_wins_for_links(self) -> None:
+        settings = Settings(
+            hub_url="http://proxy-public.binderhub.svc.cluster.local",
+            public_hub_url="https://jupyterhub.af.uchicago.edu",
+        )
+        assert settings.public_url == "https://jupyterhub.af.uchicago.edu"
+        assert settings.hub_url == "http://proxy-public.binderhub.svc.cluster.local"
+
+    def test_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(
+            "JUPYTERHUB_MCP_HUB_URL", "http://proxy-public.binderhub.svc.cluster.local"
+        )
+        monkeypatch.setenv(
+            "JUPYTERHUB_MCP_PUBLIC_HUB_URL", "https://jupyterhub.af.uchicago.edu/"
+        )
+        settings = Settings.from_env()
+        assert settings.hub_url == "http://proxy-public.binderhub.svc.cluster.local"
+        assert settings.public_url == "https://jupyterhub.af.uchicago.edu"
 
 
 class TestAllImages:

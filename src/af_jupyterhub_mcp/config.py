@@ -1,7 +1,7 @@
 """Environment-driven configuration for af-jupyterhub-mcp.
 
 Every knob here has a chart-values-driven env var so an operator can change
-the hub URL, the image allowlist, the site list, or per-image tool support
+the hub URLs, the image allowlist, the site list, or per-image tool support
 without a code release (see ``charts/af-jupyterhub-mcp/values.yaml`` ->
 ``templates/deployment.yaml``).
 """
@@ -71,9 +71,15 @@ def _env_positive_int(name: str) -> int | None:
 class Settings:
     """Runtime configuration, normally built once in the server lifespan."""
 
-    # JupyterHub base URL. Every hub API call, launch, and notebook proxy
-    # call (``{hub_url}/user/<name>/<server>/mcp``) goes through it.
+    # JupyterHub base URL this backend connects to. Every hub API call,
+    # launch, and notebook proxy call (``{hub_url}/user/<name>/<server>/mcp``)
+    # goes through it. In-cluster this is the hub's proxy Service (e.g.
+    # http://proxy-public.binderhub.svc.cluster.local).
     hub_url: str = "https://jupyterhub.af.uchicago.edu"
+
+    # JupyterHub base URL shown to users (server lab URLs in tool results).
+    # None means links use hub_url; see the ``public_url`` property.
+    public_hub_url: str | None = None
 
     # Image allowlist, chart-values-driven. create_jupyter_server requires a
     # cpu_images entry for gpus=0 and a gpu_images entry for gpus>0. Every
@@ -103,6 +109,11 @@ class Settings:
     auth_cache_ttl_seconds: int = 60
 
     @property
+    def public_url(self) -> str:
+        """Return the hub base URL for user-facing links."""
+        return self.public_hub_url or self.hub_url
+
+    @property
     def all_images(self) -> tuple[str, ...]:
         """Return the deduplicated union of the CPU and GPU image allowlists."""
         seen: dict[str, None] = {}
@@ -116,6 +127,8 @@ class Settings:
         kwargs: dict[str, object] = {}
         if hub_url := os.environ.get("JUPYTERHUB_MCP_HUB_URL"):
             kwargs["hub_url"] = hub_url.rstrip("/")
+        if public_hub_url := os.environ.get("JUPYTERHUB_MCP_PUBLIC_HUB_URL"):
+            kwargs["public_hub_url"] = public_hub_url.rstrip("/")
         if cpu_images := os.environ.get("JUPYTERHUB_MCP_CPU_IMAGES"):
             kwargs["cpu_images"] = _split_csv(cpu_images)
         if gpu_images := os.environ.get("JUPYTERHUB_MCP_GPU_IMAGES"):
