@@ -48,7 +48,9 @@ jupyterhub:
   that names the missing ones.
 - **Token lifetime.** Tokens from this client last the hub's default 14 days.
   There is no refresh token, so users re-link from the af-mcp-platform portal
-  when theirs expires.
+  when theirs expires. The backend answers HTTP 401 only when the hub refuses a
+  token. If the hub cannot be reached, it answers 503, so a hub outage never
+  gets a user's link marked rejected.
 
 ## 2. af-mcp-platform
 
