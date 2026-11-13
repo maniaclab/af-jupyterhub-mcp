@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
+import logging
+import socket
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -13,6 +16,8 @@ from tests.fakes import ALICE_TOKEN, FakeHub
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+    import pytest
 
     from af_jupyterhub_mcp.config import Settings
 
@@ -104,6 +109,53 @@ class TestApp:
             )
         assert response.status_code == 401
         assert fake_hub.requests[-1].url.path == "/hub/api/user"
+
+    async def test_initialize_during_hub_outage_is_503_not_401(
+        self, settings: Settings, fake_hub: FakeHub, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A 401 tells the broker the token is dead; a hub outage is not that.
+        fake_hub.fail_paths["/hub/api/user"] = 503
+        with caplog.at_level(logging.WARNING):
+            async with app_client(settings, fake_hub) as client:
+                response = await client.post(
+                    "/mcp",
+                    json=_INITIALIZE,
+                    headers={**_MCP_HEADERS, "Authorization": f"Bearer {ALICE_TOKEN}"},
+                )
+        assert response.status_code == 503
+        assert response.json()["error"] == "temporarily_unavailable"
+        assert [(r.name, r.levelname) for r in caplog.records] == [
+            ("af_jupyterhub_mcp.server", "WARNING")
+        ]
+        assert ALICE_TOKEN not in caplog.text
+
+    async def test_initialize_with_hub_unreachable_is_503(
+        self, settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # No fake here: the app's real HTTP client dials a loopback port with
+        # nothing listening, the way it would find a hub that is down.
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            closed_port = sock.getsockname()[1]
+        down = dataclasses.replace(settings, hub_url=f"http://127.0.0.1:{closed_port}")
+        app = make_app(settings=down, resource_url=RESOURCE_URL, host="127.0.0.1")
+        with caplog.at_level(logging.WARNING):
+            async with (
+                app.router.lifespan_context(app),
+                httpx2.AsyncClient(
+                    transport=httpx2.ASGITransport(app=app), base_url=RESOURCE_URL
+                ) as client,
+            ):
+                response = await client.post(
+                    "/mcp",
+                    json=_INITIALIZE,
+                    headers={**_MCP_HEADERS, "Authorization": f"Bearer {ALICE_TOKEN}"},
+                )
+        assert response.status_code == 503
+        assert "could not reach JupyterHub" in response.json()["error_description"]
+        assert [(r.name, r.levelname) for r in caplog.records] == [
+            ("af_jupyterhub_mcp.server", "WARNING")
+        ]
 
     async def test_initialize_with_hub_token(
         self, settings: Settings, fake_hub: FakeHub
