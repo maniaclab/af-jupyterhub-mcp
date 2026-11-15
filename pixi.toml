@@ -18,7 +18,7 @@ backend = { name = "pixi-build-python", version = "*" }
 config = { noarch = true }
 
 [package.host-dependencies]
-python = ">=3.10"
+python = ">=3.11"
 uv = "*"
 hatchling = ">=1.25"
 hatch-vcs = ">=0.4"
@@ -27,9 +27,6 @@ hatch-vcs = ">=0.4"
 mcp = ">=2.0.0,<3"
 httpx2 = ">=2.5.0"
 anyio = ">=4.9"
-
-[feature.py310.dependencies]
-python = "<3.11,>=3.10"
 
 [feature.py311.dependencies]
 python = "<3.12,>=3.11"
@@ -100,7 +97,6 @@ build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], d
 docs = ["docs"]
 dev = ["dev"]
 helm = { features = ["helm"], no-default-feature = true }
-py310 = ["test", "py310"]
 py311 = ["test", "py311"]
 py312 = ["test", "py312"]
 py313 = ["test", "py313"]
