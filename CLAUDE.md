@@ -30,7 +30,9 @@ tab and fail without one. 76 tools in total.
 `src/af_jupyterhub_mcp/` splits into `auth/` (hub-token verification), `hub/`
 (all JupyterHub-facing logic: the REST client, server naming/validation/
 summaries/spawn following, the notebook MCP proxy, and errors), and `tools/`
-(the `@mcp.tool()` registrations plus shared `_helpers.py`). `tests/` mirrors
+(the `@mcp.tool()` registrations plus shared `_helpers.py`). `observability.py`
+holds the request-id binding, JSON log formatter, access line and `tool.call`
+line the platform's observability contract asks of a backend. `tests/` mirrors
 this layout (`tests/auth/`, `tests/hub/`, `tests/tools/`), plus
 `test_config.py`, `test_server.py`, `test_cli.py`, `test_integration.py` (real
 app + real MCP client against the fake hub) and `test_e2e_hub.py` (live hub).
