@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from mcp.server.mcpserver import Context  # noqa: TC002
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from mcp.types import CallToolResult, ToolAnnotations
 from pydantic import BaseModel
 
 from af_jupyterhub_mcp.auth.hub import HubIdentity, get_hub_identity
@@ -43,7 +43,11 @@ from af_jupyterhub_mcp.hub.proxy import (
     call_notebook_tool,
 )
 from af_jupyterhub_mcp.hub.servers import check_server_name, find_server, server_status
-from af_jupyterhub_mcp.tools._helpers import format_error
+from af_jupyterhub_mcp.tools._helpers import (
+    ImageOutput,
+    format_error,
+    render_outputs,
+)
 
 if TYPE_CHECKING:
     from mcp.server.mcpserver import MCPServer
@@ -56,13 +60,16 @@ class NbProxyResult(BaseModel):
     """Structured result of a proxied nb_* tool call.
 
     jupyter-mcp-server (the upstream every nb_* tool proxies to) returns
-    markdown/plain text for every tool, not structured data -- this is a
+    markdown/plain text (plus image blocks for figures), not structured data -- this is a
     minimal wrapper around that opaque passthrough rather than a per-tool
     schema, since there is no further structure to extract without coupling
-    to upstream's undocumented text format.
+    to upstream's undocumented text format. ``images`` describes the figures
+    among the outputs (type, size, how each was returned); their pixels are
+    in the result's image content blocks, not here.
     """
 
     result: str
+    images: list[ImageOutput] = []
 
 
 def _lifespan(ctx: Any) -> tuple[HubClient, Settings]:
@@ -110,8 +117,10 @@ async def _call_upstream(
     yours, not ready, auth, hub, transport error, upstream tool error) is
     caught here and turned into a single ``is_error`` result via
     ``format_error`` -- this is the one place that knows the recovery hint
-    for each failure. On success, the upstream's text output is wrapped in
-    ``NbProxyResult`` for ``structured_content``.
+    for each failure. On success, the upstream's content blocks go through
+    ``render_outputs`` (text kept, figures forwarded as image content under
+    the size caps) and its text and image metadata fill ``NbProxyResult``
+    for ``structured_content``.
     """
     try:
         identity, model = await _get_ready_server(ctx, server_name)
@@ -159,7 +168,7 @@ async def _call_upstream(
         )
     try:
         async with hub.notebook_http_client(identity.token) as http_client:
-            text = await call_notebook_tool(
+            blocks = await call_notebook_tool(
                 http_client=http_client,
                 mcp_url=hub.notebook_mcp_url(identity.name, server_name),
                 tool_name=tool_name,
@@ -176,9 +185,14 @@ async def _call_upstream(
     except NotebookToolUpstreamError as exc:
         return format_error(exc)
 
-    payload = NbProxyResult(result=text)
+    rendered = render_outputs(
+        blocks,
+        max_image_bytes=settings.image_output_max_bytes,
+        max_total_bytes=settings.image_output_max_total_bytes,
+    )
+    payload = NbProxyResult(result=rendered.text, images=rendered.images)
     return CallToolResult(
-        content=[TextContent(type="text", text=text)],
+        content=rendered.content,
         structured_content=payload.model_dump(mode="json"),
     )
 

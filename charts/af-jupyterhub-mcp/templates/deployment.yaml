@@ -92,6 +92,10 @@ spec:
               value: {{ .Values.notebook.sites | join "," | quote }}
             - name: JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS
               value: {{ .Values.notebook.launchTimeoutSeconds | quote }}
+            - name: JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES
+              value: {{ .Values.notebook.imageOutput.maxBytes | quote }}
+            - name: JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES
+              value: {{ .Values.notebook.imageOutput.maxTotalBytes | quote }}
             - name: JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS
               value: {{ .Values.auth.cacheTtlSeconds | quote }}
             {{- with .Values.extraEnv }}

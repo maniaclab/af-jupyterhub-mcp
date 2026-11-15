@@ -7,8 +7,12 @@ MCP handshake and tool call run for real; only the network is in-memory.
 
 from __future__ import annotations
 
+import base64
+from typing import TYPE_CHECKING
+
 import httpx2
 import pytest
+from mcp.types import ImageContent, TextContent
 
 from af_jupyterhub_mcp.hub.client import HubClient
 from af_jupyterhub_mcp.hub.proxy import (
@@ -16,12 +20,15 @@ from af_jupyterhub_mcp.hub.proxy import (
     NotebookToolUpstreamError,
     call_notebook_tool,
 )
-from tests.fakes import ALICE_TOKEN, BOB_TOKEN, HUB_URL, FakeHub
+from tests.fakes import ALICE_TOKEN, BOB_TOKEN, HUB_URL, PNG_1X1, FakeHub
+
+if TYPE_CHECKING:
+    from mcp.types import ContentBlock
 
 
 async def _call(
     hub: HubClient, tool: str, args: dict[str, object], token: str = ALICE_TOKEN
-) -> str:
+) -> list[ContentBlock]:
     async with hub.notebook_http_client(token) as client:
         return await call_notebook_tool(
             http_client=client,
@@ -33,8 +40,20 @@ async def _call(
 
 class TestCallNotebookTool:
     async def test_returns_the_upstream_text(self, hub: HubClient) -> None:
-        text = await _call(hub, "execute_code", {"code": "print(1+1)"})
-        assert text == "ran 'print(1+1)' (timeout 30)"
+        blocks = await _call(hub, "execute_code", {"code": "print(1+1)"})
+        assert blocks == [
+            TextContent(type="text", text="ran 'print(1+1)' (timeout 30)")
+        ]
+
+    async def test_returns_image_blocks_in_order(self, hub: HubClient) -> None:
+        blocks = await _call(
+            hub, "insert_execute_code_cell", {"cell_index": 0, "cell_source": "x"}
+        )
+        assert [b.type for b in blocks] == ["text", "image", "text"]
+        image = blocks[1]
+        assert isinstance(image, ImageContent)
+        assert image.mime_type == "image/png"
+        assert base64.b64decode(image.data) == PNG_1X1
 
     async def test_requests_carry_the_hub_token_header_not_a_query(
         self, hub: HubClient, fake_hub: FakeHub

@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 import anyio
 import httpx2
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Image, MCPServer
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -37,6 +37,13 @@ if TYPE_CHECKING:
     from starlette.applications import Starlette
 
 HUB_URL = "https://hub.example.org"
+
+# A real 1x1 PNG, the image output of the fake notebook's plotting tools.
+PNG_1X1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000d49444154789c63f8cfc0f01f00050001ff89993d1d000000004945"
+    "4e44ae426082"
+)
 
 ALICE_TOKEN = "alice-hub-token"
 BOB_TOKEN = "bob-hub-token"
@@ -328,6 +335,22 @@ def make_notebook_app() -> Starlette:
     @notebook.tool()
     def execute_code(code: str, timeout: int = 30) -> str:
         return f"ran {code!r} (timeout {timeout})"
+
+    # Like jupyter-mcp-server, execution and cell reads answer with a list of
+    # outputs in order: text as str, a figure as an image.
+    @notebook.tool()
+    def insert_execute_code_cell(
+        cell_index: int,  # noqa: ARG001
+        cell_source: str,  # noqa: ARG001
+    ) -> list[str | Image]:
+        return ["before-plot\n", Image(data=PNG_1X1, format="png"), "after-plot\n"]
+
+    @notebook.tool()
+    def read_cell(
+        cell_index: int | None = None,  # noqa: ARG001
+        include_outputs: bool = True,  # noqa: ARG001
+    ) -> list[str | Image]:
+        return ["plt.show()", Image(data=PNG_1X1, format="png")]
 
     @notebook.tool()
     def fail() -> str:

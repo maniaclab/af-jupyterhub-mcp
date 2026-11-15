@@ -107,6 +107,14 @@ notebook:
   # giving up (the server is left pending, not deleted).
   launchTimeoutSeconds: 900
 
+  # Caps (decoded bytes) on the figures nb_* tools return as MCP image
+  # content. A figure over maxBytes, or past maxTotalBytes of images in one
+  # call, is replaced by a text marker saying it was omitted (it stays saved
+  # in the notebook).
+  imageOutput:
+    maxBytes: 1048576
+    maxTotalBytes: 4194304
+
 # NOTE: the CPU/memory RANGE guardrails (1-16 cores, 1-256 GB) are NOT chart
 # values -- they are always-enforced validation in the server itself. The
 # per-user named-server limit (10) is the hub's own setting.

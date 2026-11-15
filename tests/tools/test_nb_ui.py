@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.types import TextContent
 
 from af_jupyterhub_mcp.tools import nb_proxy as nb_proxy_mod
 from af_jupyterhub_mcp.tools import nb_ui as nb_ui_mod
@@ -237,14 +238,14 @@ class TestNbUiForwarding:
         ctx = ready_ctx
         with patch(
             _PATCH,
-            new=AsyncMock(return_value="ok"),
+            new=AsyncMock(return_value=[TextContent(type="text", text="ok")]),
         ) as mock_call:
             result = await registered_ui_tools[_proxy_name(upstream)](
                 server_name="nb-1", ctx=ctx
             )
 
         assert result.is_error is not True
-        assert result.structured_content == {"result": "ok"}
+        assert result.structured_content == {"result": "ok", "images": []}
         kwargs = mock_call.call_args.kwargs
         assert kwargs["tool_name"] == upstream
         assert kwargs["tool_args"] == {}
@@ -349,7 +350,7 @@ class TestNbUiForwarding:
         ctx = ready_ctx
         with patch(
             _PATCH,
-            new=AsyncMock(return_value="ok"),
+            new=AsyncMock(return_value=[TextContent(type="text", text="ok")]),
         ) as mock_call:
             result = await registered_ui_tools[_proxy_name(upstream)](
                 server_name="nb-1", **call_args, ctx=ctx
@@ -369,7 +370,7 @@ class TestNbUiForwarding:
         ctx = make_ctx()
         with patch(
             _PATCH,
-            new=AsyncMock(return_value="ok"),
+            new=AsyncMock(return_value=[TextContent(type="text", text="ok")]),
         ) as mock_call:
             result = await registered_ui_tools["nb_ui_notebook_run_all_cells"](
                 server_name="bobs-server", ctx=ctx
@@ -403,7 +404,7 @@ class TestNbUiImageToolOverrides:
         )
         with patch(
             _PATCH,
-            new=AsyncMock(return_value="ok"),
+            new=AsyncMock(return_value=[TextContent(type="text", text="ok")]),
         ) as mock_call:
             allowed = await registered_ui_tools["nb_ui_notebook_run_all_cells"](
                 server_name="nb-1", ctx=ctx

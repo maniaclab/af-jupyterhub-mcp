@@ -22,6 +22,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "JUPYTERHUB_MCP_SITES",
         "JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS",
         "JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS",
+        "JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES",
+        "JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -70,9 +72,18 @@ class TestFromEnv:
     def test_integer_knobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS", "120")
         monkeypatch.setenv("JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS", "5")
+        monkeypatch.setenv("JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES", "2000")
+        monkeypatch.setenv("JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES", "9000")
         settings = Settings.from_env()
         assert settings.launch_timeout_seconds == 120
         assert settings.auth_cache_ttl_seconds == 5
+        assert settings.image_output_max_bytes == 2000
+        assert settings.image_output_max_total_bytes == 9000
+
+    def test_image_output_caps_default_to_1_and_4_mib(self) -> None:
+        settings = Settings()
+        assert settings.image_output_max_bytes == 1024 * 1024
+        assert settings.image_output_max_total_bytes == 4 * 1024 * 1024
 
     @pytest.mark.parametrize(
         ("name", "raw"),
@@ -80,6 +91,7 @@ class TestFromEnv:
             pytest.param("JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS", "soon", id="nan"),
             pytest.param("JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS", "0", id="zero"),
             pytest.param("JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS", "-1", id="neg"),
+            pytest.param("JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES", "0", id="img-zero"),
         ],
     )
     def test_bad_integer_knob_raises(

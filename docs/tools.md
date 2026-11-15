@@ -169,6 +169,25 @@ Deliberately **not** proxied (and not allowlisted in the image):
   block on a modal dialog that needs a human click. Use `nb_restart_notebook` to
   restart a kernel without the UI.
 
+## Figures and other image outputs
+
+Execution tools (`nb_execute_cell`, `nb_insert_execute_code_cell`,
+`nb_execute_code`) and `nb_read_cell` / `nb_read_notebook` return a figure the
+notebook produced (e.g. a matplotlib `image/png`) as MCP image content, in order
+among the text outputs. Each image is preceded by a text marker such as
+`[image/png output 1, 4.1 kB]`, so a client that does not render images still
+knows a figure exists. `structuredContent.images` lists each image's `index`,
+`mime_type`, `size_bytes` and `delivery` (`image`, `text` or `omitted`), never
+the pixels.
+
+An image over the per-image cap, or past the per-call total, is not returned:
+its marker says `omitted` and why, and the figure stays saved in the notebook.
+The caps are `notebook.imageOutput.maxBytes` and `maxTotalBytes`
+([Configuration](configuration.md)). SVG is returned as text; types clients
+cannot render are marked omitted. Which image types arrive at all is decided by
+the notebook image's jupyter-mcp-server, which sends `image/png` as image
+content (unless started with `ALLOW_IMG_OUTPUT=false`).
+
 ## Images with different tool sets
 
 The tool list above is fixed, but the server behind a call can run any image.
