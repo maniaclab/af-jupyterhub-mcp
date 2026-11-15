@@ -41,7 +41,7 @@ pixi run pre-commit-install
 
 ```bash
 pixi run test                 # unit + integration (fake hub, no network)
-pixi run -e py310 test        # any of py310..py314
+pixi run -e py311 test        # any of py311..py314
 AF_JUPYTERHUB_E2E_TOKEN=... pixi run -e py312 test-e2e   # live hub, no mocks
 pixi run lint                 # pre-commit (prek) + pylint
 pixi run helm-lint            # lint + smoke-render the Helm chart

@@ -11,7 +11,7 @@ description = "MCP Server for launching and driving per-user JupyterHub servers 
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
   "Development Status :: 1 - Planning",
   "Intended Audience :: Science/Research",
@@ -20,7 +20,6 @@ classifiers = [
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -33,7 +32,6 @@ dependencies = [
   "mcp>=2.0.0,<3",
   "httpx2>=2.5.0",
   "anyio>=4.9",
-  "exceptiongroup>=1.2; python_version < '3.11'",
 ]
 
 [project.scripts]
@@ -70,10 +68,6 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 strict = true
 filterwarnings = [
   "error",
-  # anyio's pytest plugin imports _pytest.python.CallSpec2, which pytest >=9.2
-  # deprecates. anyio releases that import CallSpec need Python >=3.11, so the
-  # py310 environment still resolves an anyio that warns at plugin load.
-  "ignore:_pytest\\.python\\.CallSpec2 has been renamed.*:pytest.PytestRemovedIn10Warning",
 ]
 log_level = "INFO"
 testpaths = [
@@ -95,7 +89,7 @@ report.exclude_also = [
 [tool.mypy]
 files = ["src", "tests"]
 mypy_path = ["src"]
-python_version = "3.10"
+python_version = "3.11"
 warn_unused_configs = true
 strict = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
@@ -107,10 +101,6 @@ disallow_incomplete_defs = false
 module = "af_jupyterhub_mcp.*"
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
-
-[[tool.mypy.overrides]]
-module = ["exceptiongroup.*"]
-ignore_missing_imports = true
 
 [tool.ruff]
 show-fixes = true
@@ -163,7 +153,7 @@ ignore = [
 "tests/**" = ["T20"]
 
 [tool.pylint]
-py-version = "3.10"
+py-version = "3.11"
 ignore-paths = [".*/_version.py"]
 reports.output-format = "colorized"
 similarities.ignore-imports = "yes"
