@@ -57,8 +57,6 @@ repos:
     hooks:
       - id: codespell
         args: ["--toml", "pyproject.toml"]
-        additional_dependencies:
-          - tomli; python_version<'3.11'
 
   - repo: local
     hooks:
