@@ -57,6 +57,10 @@ The service is `user-tier`: it acts only with the calling user's own hub token.
   for names it does not know.
 - `notebook.launchTimeoutSeconds`: how long `create_jupyter_server` follows the
   spawn progress. The default is 900.
+- `notebook.imageOutput.maxBytes` / `notebook.imageOutput.maxTotalBytes`: caps,
+  in decoded bytes, on one figure and on all figures returned by one `nb_*` call
+  as image content. Defaults are 1 MiB and 4 MiB; an omitted figure is replaced
+  by a text marker.
 - `auth.cacheTtlSeconds`: how long a verified token's identity is cached. The
   default is 60.
 - `ingress.enabled`: `false` by default. The aggregator calls the `Service`

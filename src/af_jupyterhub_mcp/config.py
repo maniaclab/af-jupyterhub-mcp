@@ -108,6 +108,13 @@ class Settings:
     # SHA-256, so each MCP request does not cost a /hub/api/user round trip.
     auth_cache_ttl_seconds: int = 60
 
+    # Caps on the figures (image outputs) a notebook tool call returns as MCP
+    # image content, in decoded bytes. A figure over the per-image cap, or one
+    # that would push a call's forwarded images past the total cap, is replaced
+    # by a text marker saying it was omitted; it stays saved in the notebook.
+    image_output_max_bytes: int = 1024 * 1024
+    image_output_max_total_bytes: int = 4 * 1024 * 1024
+
     @property
     def public_url(self) -> str:
         """Return the hub base URL for user-facing links."""
@@ -145,4 +152,10 @@ class Settings:
         ttl = _env_positive_int("JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS")
         if ttl is not None:
             kwargs["auth_cache_ttl_seconds"] = ttl
+        max_image = _env_positive_int("JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES")
+        if max_image is not None:
+            kwargs["image_output_max_bytes"] = max_image
+        max_total = _env_positive_int("JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES")
+        if max_total is not None:
+            kwargs["image_output_max_total_bytes"] = max_total
         return cls(**kwargs)  # type: ignore[arg-type]

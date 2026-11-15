@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import ContentBlock, TextContent
 
 if TYPE_CHECKING:
     import httpx2
@@ -58,13 +59,15 @@ async def call_notebook_tool(
     mcp_url: str,
     tool_name: str,
     tool_args: dict[str, object],
-) -> str:
-    """Call a tool on the server's jupyter-mcp-server and return its text output.
+) -> list[ContentBlock]:
+    """Call a tool on the server's jupyter-mcp-server and return its content blocks.
 
     `tool_name` is the upstream tool name exactly as jupyter-mcp-server
     registers it (e.g. `"execute_code"`).
 
-    Returns the text content of the tool result on success. Raises
+    Returns the tool result's content blocks, in order, on success: text for
+    streams and results, and image content for figures (``image/png`` etc.).
+    Callers decide what to forward; see ``tools._helpers.render_outputs``. Raises
     ``NotebookToolTransportError`` on a transport/protocol failure, or
     ``NotebookToolUpstreamError`` if jupyter-mcp-server reports its own
     tool-level error -- callers are expected to catch these and format them
@@ -83,11 +86,8 @@ async def call_notebook_tool(
     except Exception as exc:
         raise NotebookToolTransportError(_describe_exception(exc)) from exc
 
-    # Extract text from the result content blocks.
-    texts = [c.text for c in result.content if hasattr(c, "text")]
-    output = "\n".join(texts) if texts else "(no output)"
-
     if result.is_error:
-        raise NotebookToolUpstreamError(output)
+        texts = [c.text for c in result.content if isinstance(c, TextContent)]
+        raise NotebookToolUpstreamError("\n".join(texts) or "(no output)")
 
-    return output
+    return list(result.content)

@@ -14,6 +14,7 @@ mcp-SDK server; the argument-mapping tests patch ``call_notebook_tool``.
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import json
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -21,6 +22,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ImageContent, TextContent
 
 from af_jupyterhub_mcp.hub.errors import NotebookNotReadyError, NotFoundOrNotYoursError
 from af_jupyterhub_mcp.hub.proxy import (
@@ -29,7 +31,7 @@ from af_jupyterhub_mcp.hub.proxy import (
 )
 from af_jupyterhub_mcp.tools import nb_proxy as nb_proxy_mod
 from tests.conftest import CPU_IMAGE
-from tests.fakes import ALICE_TOKEN, FakeHub
+from tests.fakes import ALICE_TOKEN, PNG_1X1, FakeHub
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -172,7 +174,7 @@ class TestThroughTheHubProxy:
         )
         assert result.is_error is not True, tool_text(result)
         assert tool_text(result) == "ran 'print(1+1)' (timeout 60)"
-        assert result.structured_content == {"result": tool_text(result)}
+        assert result.structured_content == {"result": tool_text(result), "images": []}
         proxied = [r for r in ready_server.requests if r.url.path.startswith("/user/")]
         assert {r.url.path for r in proxied} == {"/user/alice/nb-1/mcp"}
         assert all(
@@ -543,7 +545,9 @@ class TestNbProxyForwardsUpstreamArgs:
         expected_args: dict[str, object],
     ) -> None:
         assert ready_server.servers["alice"]
-        with patch(_PATCH, new=AsyncMock(return_value="ok")) as mock_call:
+        with patch(
+            _PATCH, new=AsyncMock(return_value=[TextContent(type="text", text="ok")])
+        ) as mock_call:
             result = await registered_nb_tools[tool](
                 server_name="nb-1", **call_args, ctx=make_ctx()
             )
@@ -582,7 +586,9 @@ class TestImageToolOverrides:
         mcp = MCPServer("test")
         nb_proxy_mod.register(mcp)
         tools = {t.name: t.fn for t in mcp._tool_manager.list_tools()}
-        with patch(_PATCH, new=AsyncMock(return_value="ok")) as mock_call:
+        with patch(
+            _PATCH, new=AsyncMock(return_value=[TextContent(type="text", text="ok")])
+        ) as mock_call:
             result = await tools[tool](server_name="nb-1", ctx=ctx)
         return result, mock_call
 
@@ -666,3 +672,97 @@ class TestImageToolOverrides:
         )
         assert result.is_error is not True
         mock_call.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests: image outputs
+# ---------------------------------------------------------------------------
+
+
+class TestImageOutputs:
+    """Figures the notebook produced reach the caller as MCP image content.
+
+    The fake upstream is a real mcp-SDK server answering like
+    jupyter-mcp-server: text and images as an ordered list of outputs.
+    """
+
+    async def test_execute_returns_image_content_and_a_marker(
+        self,
+        make_ctx: Callable[..., MagicMock],
+        ready_server: FakeHub,
+    ) -> None:
+        assert ready_server.servers["alice"]
+        result = await nb_proxy_mod._call_upstream(
+            make_ctx(),
+            "nb-1",
+            "insert_execute_code_cell",
+            {"cell_index": 0, "cell_source": "plt.show()"},
+        )
+        assert result.is_error is not True
+        texts = [c.text for c in result.content if isinstance(c, TextContent)]
+        images = [c for c in result.content if isinstance(c, ImageContent)]
+        assert len(images) == 1
+        assert images[0].mime_type == "image/png"
+        assert base64.b64decode(images[0].data) == PNG_1X1
+        assert any("[image/png output 1, 70 B]" in t for t in texts)
+        assert "before-plot" in texts[0]
+        assert "after-plot" in texts[-1]
+        # marker sits between the text streams, image right after it
+        kinds = [c.type for c in result.content]
+        assert kinds == ["text", "image", "text"]
+
+    async def test_structured_content_carries_metadata_not_base64(
+        self,
+        make_ctx: Callable[..., MagicMock],
+        ready_server: FakeHub,
+    ) -> None:
+        assert ready_server.servers["alice"]
+        result = await nb_proxy_mod._call_upstream(
+            make_ctx(), "nb-1", "read_cell", {"include_outputs": True}
+        )
+        structured = result.structured_content
+        assert structured is not None
+        assert structured["images"] == [
+            {
+                "index": 1,
+                "mime_type": "image/png",
+                "size_bytes": len(PNG_1X1),
+                "delivery": "image",
+            }
+        ]
+        assert base64.b64encode(PNG_1X1).decode() not in str(structured)
+        assert "[image/png output 1" in structured["result"]
+        assert "plt.show()" in structured["result"]
+
+    async def test_text_only_result_has_no_images_and_one_text_block(
+        self,
+        make_ctx: Callable[..., MagicMock],
+        ready_server: FakeHub,
+    ) -> None:
+        assert ready_server.servers["alice"]
+        result = await nb_proxy_mod._call_upstream(
+            make_ctx(), "nb-1", "execute_code", {"code": "print(1)"}
+        )
+        assert [c.type for c in result.content] == ["text"]
+        assert result.structured_content == {
+            "result": "ran 'print(1)' (timeout 30)",
+            "images": [],
+        }
+
+    async def test_over_cap_image_is_omitted_with_a_note(
+        self,
+        make_ctx: Callable[..., MagicMock],
+        settings: Settings,
+        ready_server: FakeHub,
+    ) -> None:
+        assert ready_server.servers["alice"]
+        ctx = make_ctx(
+            settings_override=dataclasses.replace(settings, image_output_max_bytes=10)
+        )
+        result = await nb_proxy_mod._call_upstream(
+            ctx, "nb-1", "read_cell", {"include_outputs": True}
+        )
+        assert not any(isinstance(c, ImageContent) for c in result.content)
+        assert result.structured_content is not None
+        assert result.structured_content["images"][0]["delivery"] == "omitted"
+        assert "omitted" in result.structured_content["result"]

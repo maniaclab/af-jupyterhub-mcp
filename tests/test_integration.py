@@ -8,6 +8,7 @@ the network is in-memory (httpx2 ASGI/Mock transports).
 
 from __future__ import annotations
 
+import base64
 import json
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
@@ -15,11 +16,11 @@ from typing import TYPE_CHECKING, Any
 import httpx2
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import TextContent
+from mcp.types import ImageContent, TextContent
 
 from af_jupyterhub_mcp.server import make_app
 from tests.conftest import CPU_IMAGE, PUBLIC_HUB_URL
-from tests.fakes import ALICE_TOKEN, FakeHub
+from tests.fakes import ALICE_TOKEN, PNG_1X1, FakeHub
 from tests.test_server import RESOURCE_URL, TOOL_COUNT
 
 if TYPE_CHECKING:
@@ -113,6 +114,23 @@ class TestJupyterHubMcpOverStreamableHttp:
         for result in (created, executed, deleted):
             assert ALICE_TOKEN not in _text(result)
             assert ALICE_TOKEN not in json.dumps(result.structured_content)
+
+    async def test_figure_output_reaches_the_client_as_image_content(
+        self, settings: Settings, fake_hub: FakeHub
+    ) -> None:
+        fake_hub.add_server("alice", "nb-1", user_options={"image": CPU_IMAGE})
+        async with mcp_session(settings, fake_hub) as session:
+            result = await session.call_tool(
+                "nb_insert_execute_code_cell",
+                {"server_name": "nb-1", "cell_index": 0, "cell_source": "plt.show()"},
+            )
+        assert result.is_error is not True
+        images = [c for c in result.content if isinstance(c, ImageContent)]
+        assert [base64.b64decode(i.data) for i in images] == [PNG_1X1]
+        assert images[0].mime_type == "image/png"
+        assert "[image/png output 1" in _text(result)
+        assert result.structured_content is not None
+        assert result.structured_content["images"][0]["delivery"] == "image"
 
     async def test_binderhub_ui_server_is_listed_without_its_token(
         self, settings: Settings, fake_hub: FakeHub

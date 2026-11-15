@@ -19,6 +19,7 @@ in it through the hub proxy, and deletes it again, even on failure.
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import os
 from contextlib import asynccontextmanager
@@ -28,7 +29,7 @@ import httpx2
 import pytest
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import TextContent
+from mcp.types import ImageContent, TextContent
 
 from af_jupyterhub_mcp.config import Settings
 from af_jupyterhub_mcp.server import make_app
@@ -111,3 +112,56 @@ class TestLiveAfJupyterHub:
             assert deleted.is_error is not True, _text(deleted)
             for result in (created, listed, executed, deleted):
                 assert _TOKEN not in _text(result)
+
+    async def test_matplotlib_figure_comes_back_as_image_content(self) -> None:
+        async with live_session() as session:
+            await session.call_tool("delete_jupyter_server", {"name": _SERVER})
+            try:
+                created = await session.call_tool(
+                    "create_jupyter_server", {"image": _IMAGE, "name": _SERVER}
+                )
+                assert created.is_error is not True, _text(created)
+                used = await session.call_tool(
+                    "nb_use_notebook",
+                    {
+                        "server_name": _SERVER,
+                        "notebook_name": "figure",
+                        "notebook_path": "figure.ipynb",
+                        "mode": "create",
+                    },
+                )
+                assert used.is_error is not True, _text(used)
+                executed = await session.call_tool(
+                    "nb_insert_execute_code_cell",
+                    {
+                        "server_name": _SERVER,
+                        "cell_index": 0,
+                        "cell_source": (
+                            "%matplotlib inline\n"
+                            "import matplotlib.pyplot as plt\n"
+                            "fig, ax = plt.subplots(figsize=(2, 1.5))\n"
+                            "ax.plot([0, 1], [0, 1])\n"
+                            "plt.show()\n"
+                            "print('after-plot')\n"
+                        ),
+                    },
+                )
+                assert executed.is_error is not True, _text(executed)
+                images = [c for c in executed.content if isinstance(c, ImageContent)]
+                assert len(images) == 1
+                assert images[0].mime_type == "image/png"
+                assert base64.b64decode(images[0].data).startswith(b"\x89PNG")
+                assert "[image/png output 1" in _text(executed)
+                assert "after-plot" in (executed.structured_content or {})["result"]
+
+                read = await session.call_tool(
+                    "nb_read_cell",
+                    {"server_name": _SERVER, "cell_index": 0, "include_outputs": True},
+                )
+                assert read.is_error is not True, _text(read)
+                assert any(isinstance(c, ImageContent) for c in read.content)
+            finally:
+                deleted = await session.call_tool(
+                    "delete_jupyter_server", {"name": _SERVER}
+                )
+            assert deleted.is_error is not True, _text(deleted)

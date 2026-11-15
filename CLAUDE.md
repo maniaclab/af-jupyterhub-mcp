@@ -130,10 +130,15 @@ Key conventions:
   hand at a tool's own call site. Tool docstrings are the LLM-facing
   description: keep implementation notes (lint rationale etc.) in comments.
 - `tools/nb_proxy.py`'s and `tools/nb_ui.py`'s tools proxy to
-  jupyter-mcp-server, which returns text for every tool, so all of them share
-  one minimal wrapper model, `NbProxyResult({"result": <str>})`, via the shared
-  `_call_upstream` helper. `_get_ready_server` and `call_notebook_tool` raise
-  typed exceptions (`NotFoundOrNotYoursError`/`NotebookNotReadyError`/
+  jupyter-mcp-server, which returns text (plus image blocks for figures), so all
+  of them share one minimal wrapper model,
+  `NbProxyResult({"result": <str>, "images": [ImageOutput]})`, via the shared
+  `_call_upstream` helper. Upstream's content blocks go through
+  `_helpers.render_outputs`: text passes through, each figure becomes a text
+  marker plus an MCP `ImageContent` (or an "omitted" marker over the
+  `image_output_max_*` caps); `images` carries metadata only, never base64.
+  `_get_ready_server` and `call_notebook_tool` raise typed exceptions
+  (`NotFoundOrNotYoursError`/`NotebookNotReadyError`/
   `NotebookToolTransportError`/`NotebookToolUpstreamError`) -- never return a
   plain error string a caller has to `isinstance`-sniff.
 - Per-image tool support (`Settings.image_tool_overrides`, chart value
