@@ -14,7 +14,6 @@ request is independent.
 
 from __future__ import annotations
 
-import sys
 from typing import TYPE_CHECKING
 
 from mcp.client.session import ClientSession
@@ -22,11 +21,6 @@ from mcp.client.streamable_http import streamable_http_client
 
 if TYPE_CHECKING:
     import httpx2
-
-if sys.version_info >= (3, 11):
-    _BaseExceptionGroup = BaseExceptionGroup  # noqa: F821 -- builtin since 3.11
-else:
-    from exceptiongroup import BaseExceptionGroup as _BaseExceptionGroup
 
 
 def _describe_exception(exc: BaseException) -> str:
@@ -39,7 +33,7 @@ def _describe_exception(exc: BaseException) -> str:
     (N sub-exceptions)". Recursing into ``.exceptions`` surfaces the real
     leaf failure(s) instead.
     """
-    if isinstance(exc, _BaseExceptionGroup):
+    if isinstance(exc, BaseExceptionGroup):
         return "; ".join(_describe_exception(sub) for sub in exc.exceptions)
     return f"{type(exc).__name__}: {exc}"
 
