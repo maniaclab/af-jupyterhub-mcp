@@ -9,7 +9,10 @@ token for every hub API and notebook call it makes on the caller's behalf.
 Two places read the bearer, both through one ``HubTokenVerifier``:
 
 1. The mcp SDK's ``token_verifier=`` gates transport-level access. An
-   unknown or expired token gets a 401 before any tool runs.
+   unknown or expired token gets a 401 before any tool runs. If the hub
+   cannot answer the check (unreachable, 5xx, malformed reply) the answer is
+   503 instead: af-mcp-platform reads a 401 as a dead token and would mark
+   the user's link rejected.
 2. Each tool calls ``get_hub_identity(ctx)``, which re-reads the bearer and
    asks the same verifier again. That is a cache hit (keyed by the token's
    SHA-256, short TTL), so it costs no extra hub round trip. It returns the
@@ -28,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 from mcp.server.auth.provider import AccessToken
 
-from af_jupyterhub_mcp.hub.errors import HubError
+from af_jupyterhub_mcp.hub.errors import HubAPIError, HubError, HubUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -47,6 +50,10 @@ REQUIRED_SCOPES: tuple[str, ...] = (
 )
 
 _RELINK_HINT = "re-link your JupyterHub account in af-mcp-platform"
+
+# Statuses on /hub/api/user that mean the hub refused the token itself.
+# Anything else that isn't a 2xx is the hub failing to answer.
+_REFUSAL_STATUSES = frozenset({401, 403})
 
 
 class MissingScopesError(PermissionError):
@@ -91,8 +98,13 @@ class HubTokenVerifier:
 
     Successful lookups are cached for *ttl_seconds*, keyed by the token's
     SHA-256 so the raw token is never a dict key. Rejections are not cached,
-    so a token that failed during a hub outage works again once the hub
-    recovers.
+    so a token the user just re-linked works at once.
+
+    Only a definite refusal rejects the token (returns None, so the transport
+    answers 401): a 401/403 from ``/hub/api/user``, or a token that does not
+    belong to a user. If the hub is unreachable, answers with a 5xx, or sends
+    a malformed reply, ``HubUnavailableError`` is raised instead and the
+    transport answers 503 (see ``server.py``); nothing is cached.
     """
 
     def __init__(
@@ -112,7 +124,11 @@ class HubTokenVerifier:
             del self._cache[key]
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        """Return the hub identity for *token*, or None if the hub rejects it."""
+        """Return the hub identity for *token*, or None if the hub rejects it.
+
+        Raises:
+            HubUnavailableError: the hub could not answer the check.
+        """
         key = hashlib.sha256(token.encode()).hexdigest()
         now = self._clock()
         self._prune(now)
@@ -120,9 +136,16 @@ class HubTokenVerifier:
             return entry.access
         try:
             model = await self._hub.get_self(token)
+        except HubAPIError as exc:
+            if exc.status in _REFUSAL_STATUSES:
+                log.warning("JupyterHub refused a token (HTTP %s): %s", exc.status, exc)
+                return None
+            status = f" (HTTP {exc.status})" if exc.status is not None else ""
+            msg = f"JupyterHub could not check the token{status}: {exc}"
+            raise HubUnavailableError(msg) from exc
         except HubError as exc:
-            log.warning("JupyterHub rejected or failed a token lookup: %s", exc)
-            return None
+            msg = f"JupyterHub could not check the token: {exc}"
+            raise HubUnavailableError(msg) from exc
         name = model.get("name")
         if not isinstance(name, str) or not name or model.get("kind", "user") != "user":
             log.warning("JupyterHub token does not belong to a user; rejecting")
@@ -152,6 +175,7 @@ async def get_hub_identity(ctx: Any) -> HubIdentity:
             token (expired or revoked link).
         MissingScopesError: the token is valid but lacks some of
             ``REQUIRED_SCOPES``; the message names them.
+        HubUnavailableError: the hub could not answer the token check.
     """
     token = _extract_bearer(ctx)
     verifier: HubTokenVerifier = ctx.request_context.lifespan_context["verifier"]

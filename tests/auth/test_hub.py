@@ -17,6 +17,7 @@ from af_jupyterhub_mcp.auth.hub import (
     missing_scopes,
 )
 from af_jupyterhub_mcp.hub.client import HubClient
+from af_jupyterhub_mcp.hub.errors import HubUnavailableError
 from tests.fakes import ALICE_TOKEN, HUB_URL, FakeHub
 
 
@@ -101,17 +102,53 @@ class TestVerifyToken:
     async def test_unknown_token_is_rejected(self, verifier: HubTokenVerifier) -> None:
         assert await verifier.verify_token("not-a-token") is None
 
-    async def test_hub_failure_is_rejected_and_logged_without_token(
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_hub_refusal_is_rejected_and_logged_without_token(
         self,
         verifier: HubTokenVerifier,
         fake_hub: FakeHub,
         caplog: pytest.LogCaptureFixture,
+        status: int,
     ) -> None:
-        fake_hub.fail_paths["/hub/api/user"] = 500
+        fake_hub.fail_paths["/hub/api/user"] = status
         with caplog.at_level(logging.WARNING, logger="af_jupyterhub_mcp.auth.hub"):
             assert await verifier.verify_token(ALICE_TOKEN) is None
-        assert "500" in caplog.text
+        assert str(status) in caplog.text
         assert ALICE_TOKEN not in caplog.text
+
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    async def test_hub_server_error_raises_instead_of_rejecting(
+        self, verifier: HubTokenVerifier, fake_hub: FakeHub, status: int
+    ) -> None:
+        # Rejecting here would make the transport answer 401, and the broker
+        # would mark a still-valid, non-refreshable hub token as rejected.
+        fake_hub.fail_paths["/hub/api/user"] = status
+        with pytest.raises(HubUnavailableError, match=str(status)) as excinfo:
+            await verifier.verify_token(ALICE_TOKEN)
+        assert ALICE_TOKEN not in str(excinfo.value)
+
+    async def test_unreachable_hub_raises_instead_of_rejecting(self) -> None:
+        def refuse(request: httpx2.Request) -> httpx2.Response:
+            msg = "connection refused"
+            raise httpx2.ConnectError(msg, request=request)
+
+        hub = HubClient(HUB_URL, transport=httpx2.MockTransport(refuse))
+        try:
+            with pytest.raises(HubUnavailableError, match="could not reach"):
+                await HubTokenVerifier(hub, ttl_seconds=60).verify_token(ALICE_TOKEN)
+        finally:
+            await hub.aclose()
+
+    async def test_malformed_hub_answer_raises_instead_of_rejecting(self) -> None:
+        def garbled(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, text="<html>proxy error page</html>")
+
+        hub = HubClient(HUB_URL, transport=httpx2.MockTransport(garbled))
+        try:
+            with pytest.raises(HubUnavailableError, match="malformed"):
+                await HubTokenVerifier(hub, ttl_seconds=60).verify_token(ALICE_TOKEN)
+        finally:
+            await hub.aclose()
 
     async def test_result_is_cached_within_ttl(
         self, verifier: HubTokenVerifier, fake_hub: FakeHub, clock: _Clock
@@ -132,8 +169,17 @@ class TestVerifyToken:
     async def test_rejections_are_not_cached(
         self, verifier: HubTokenVerifier, fake_hub: FakeHub
     ) -> None:
-        fake_hub.fail_paths["/hub/api/user"] = 500
+        fake_hub.fail_paths["/hub/api/user"] = 401
         assert await verifier.verify_token(ALICE_TOKEN) is None
+        fake_hub.fail_paths.clear()
+        assert await verifier.verify_token(ALICE_TOKEN) is not None
+
+    async def test_outages_are_not_cached(
+        self, verifier: HubTokenVerifier, fake_hub: FakeHub
+    ) -> None:
+        fake_hub.fail_paths["/hub/api/user"] = 503
+        with pytest.raises(HubUnavailableError):
+            await verifier.verify_token(ALICE_TOKEN)
         fake_hub.fail_paths.clear()
         assert await verifier.verify_token(ALICE_TOKEN) is not None
 

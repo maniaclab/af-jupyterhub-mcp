@@ -11,6 +11,17 @@ class HubRequestError(HubError):
     """The hub could not be reached (connection, TLS, or timeout failure)."""
 
 
+class HubUnavailableError(HubError):
+    """The hub could not answer a token check.
+
+    Raised by ``HubTokenVerifier`` when the hub is unreachable, answers with a
+    5xx, or sends a malformed reply -- anything other than a definite refusal.
+    The transport answers it with 503, never 401: a 401 tells af-mcp-platform
+    the token is dead, and the broker would then mark a still-valid,
+    non-refreshable hub token as rejected.
+    """
+
+
 class HubAPIError(HubError):
     """The hub answered with an error status, or with a malformed body.
 

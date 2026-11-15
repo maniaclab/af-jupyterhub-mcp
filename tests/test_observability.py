@@ -28,7 +28,7 @@ from af_jupyterhub_mcp.observability import (
 )
 from af_jupyterhub_mcp.server import make_app
 from tests.fakes import ALICE_TOKEN, FakeHub
-from tests.test_server import RESOURCE_URL
+from tests.test_server import _INITIALIZE, _MCP_HEADERS, RESOURCE_URL
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -221,6 +221,30 @@ class TestProbeNoise:
             await client.get("/healthz")
         (line,) = [x for x in parsed(log_lines) if x["logger"] != "httpx2"]
         assert (line["path"], line["status"]) == ("/healthz", 503)
+
+    async def test_hub_outage_503_has_an_access_line_with_the_request_id(
+        self, settings: Settings, fake_hub: FakeHub, log_lines: io.StringIO
+    ) -> None:
+        # RequestLogMiddleware must sit outside _HubUnavailableMiddleware, or
+        # the 503 it answers during a hub outage leaves no access line.
+        fake_hub.fail_paths["/hub/api/user"] = 503
+        async with http_client(settings, fake_hub, log_lines) as client:
+            resp = await client.post(
+                "/mcp",
+                json=_INITIALIZE,
+                headers={
+                    **_MCP_HEADERS,
+                    "Authorization": f"Bearer {ALICE_TOKEN}",
+                    "X-Request-ID": "outage-1",
+                },
+            )
+        assert resp.status_code == 503
+        (line,) = [x for x in parsed(log_lines) if x["event"] == "http.request"]
+        assert (line["path"], line["status"], line["request_id"]) == (
+            "/mcp",
+            503,
+            "outage-1",
+        )
 
     async def test_other_requests_keep_their_access_line(
         self, settings: Settings, fake_hub: FakeHub, log_lines: io.StringIO
