@@ -91,13 +91,13 @@ spec:
             - name: JUPYTERHUB_MCP_SITES
               value: {{ .Values.notebook.sites | join "," | quote }}
             - name: JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS
-              value: {{ .Values.notebook.launchTimeoutSeconds | quote }}
+              value: {{ .Values.notebook.launchTimeoutSeconds | int64 | quote }}
             - name: JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES
-              value: {{ .Values.notebook.imageOutput.maxBytes | quote }}
+              value: {{ .Values.notebook.imageOutput.maxBytes | int64 | quote }}
             - name: JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES
-              value: {{ .Values.notebook.imageOutput.maxTotalBytes | quote }}
+              value: {{ .Values.notebook.imageOutput.maxTotalBytes | int64 | quote }}
             - name: JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS
-              value: {{ .Values.auth.cacheTtlSeconds | quote }}
+              value: {{ .Values.auth.cacheTtlSeconds | int64 | quote }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

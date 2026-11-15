@@ -50,6 +50,7 @@ repos:
           - mcp==2.3.0
           - httpx2
           - anyio
+          - types-PyYAML
 
   - repo: https://github.com/codespell-project/codespell
     rev: "57b21406f092110c18776e39b0bda50d37c945c8" # frozen: v2.4.3
