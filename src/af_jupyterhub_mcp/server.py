@@ -21,6 +21,11 @@ from af_jupyterhub_mcp.auth.hub import HubTokenVerifier
 from af_jupyterhub_mcp.config import Settings
 from af_jupyterhub_mcp.hub.client import HubClient
 from af_jupyterhub_mcp.hub.errors import HubUnavailableError
+from af_jupyterhub_mcp.observability import (
+    RequestLogMiddleware,
+    ToolCallMiddleware,
+    configure_logging,
+)
 from af_jupyterhub_mcp.tools import jupyterhub as jupyterhub_tools
 from af_jupyterhub_mcp.tools import nb_proxy as nb_proxy_tools
 from af_jupyterhub_mcp.tools import nb_ui as nb_ui_tools
@@ -104,6 +109,7 @@ def make_app(
         instructions=_INSTRUCTIONS,
         lifespan=_lifespan,
         token_verifier=verifier,
+        middleware=[ToolCallMiddleware()],
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(resource_url),
             # The aggregator injects the bearer itself; no OAuth discovery
@@ -123,8 +129,12 @@ def make_app(
     app = mcp.streamable_http_app(
         streamable_http_path="/mcp", host=host, stateless_http=True
     )
-    # Outermost, so it also wraps the SDK's authentication middleware.
+    # Wraps the SDK's authentication middleware, so a hub outage during the
+    # token check becomes a 503 instead of escaping as a 500.
     app.add_middleware(_HubUnavailableMiddleware)
+    # Added last, so it is outermost: its access line and request id cover
+    # every response, including _HubUnavailableMiddleware's 503.
+    app.add_middleware(RequestLogMiddleware)
     return app
 
 
@@ -143,6 +153,7 @@ def serve(
         host=host,
     )
 
+    configure_logging(log_level)
     uvicorn.run(
         app,
         host=host,
@@ -150,4 +161,8 @@ def serve(
         proxy_headers=True,
         forwarded_allow_ips=forwarded_allow_ips,
         log_level=log_level,
+        # RequestLogMiddleware writes the access line, minus successful probes.
+        access_log=False,
+        # uvicorn's own lines go through configure_logging, as JSON.
+        log_config=None,
     )
