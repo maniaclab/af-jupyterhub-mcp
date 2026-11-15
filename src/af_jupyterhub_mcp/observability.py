@@ -138,7 +138,7 @@ class ToolCallMiddleware(ServerMiddleware[Any]):
             # Tools report their failures as an isError result, not an
             # exception, and the middleware sees the result as its wire dict.
             if not (isinstance(result, dict) and result.get("isError")):
-                outcome = "ok"
+                outcome = "success"
         finally:
             log.info(
                 "tool.call",
