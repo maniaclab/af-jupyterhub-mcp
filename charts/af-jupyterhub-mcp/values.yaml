@@ -52,6 +52,16 @@ hub:
   # public hub whenever hub.url is an in-cluster address.
   publicUrl: ""
 
+# -- BinderHub GPU resources endpoint that list_gpu_resources reads to show
+# which GPU products exist on the local site and how many are free, so a
+# caller can pick a create_jupyter_server gpu_product (env
+# JUPYTERHUB_MCP_GPU_RESOURCES_URL). Cluster-wide and unauthenticated. In
+# cluster, point it at the binder Service, e.g.
+# http://binderhub.binderhub.svc.cluster.local/resources. Empty disables
+# the tool (it then returns a clear "not configured" error).
+gpuResources:
+  url: "https://binderhub.af.uchicago.edu/resources"
+
 # -- What create_jupyter_server may launch, and how the nb_* tools treat
 # each image.
 notebook:

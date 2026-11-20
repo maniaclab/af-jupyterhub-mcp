@@ -27,6 +27,13 @@ MEMORY_GB_MAX = 256
 DEFAULT_CPU_IMAGES = ("hub.opensciencegrid.org/usatlas/ml-platform-cpu:latest",)
 DEFAULT_GPU_IMAGES = ("hub.opensciencegrid.org/usatlas/ml-platform-gpu:latest",)
 
+# BinderHub's GPU resources endpoint: the live, cluster-wide list of GPU
+# products on the local site and how many of each are free. list_gpu_resources
+# reads it so a caller can pick a create_jupyter_server gpu_product that exists
+# and is free right now. Public by default; point it at the in-cluster binder
+# Service when running behind the aggregator.
+DEFAULT_GPU_RESOURCES_URL = "https://binderhub.af.uchicago.edu/resources"
+
 
 def _split_csv(value: str) -> tuple[str, ...]:
     return tuple(v.strip() for v in value.split(",") if v.strip())
@@ -100,6 +107,11 @@ class Settings:
     # it does not recognise, so "local" always works.
     sites: tuple[str, ...] = ("local",)
 
+    # BinderHub GPU resources endpoint read by list_gpu_resources (see
+    # DEFAULT_GPU_RESOURCES_URL). None disables the tool (it then returns a
+    # clear "not configured" error instead of making a request).
+    gpu_resources_url: str | None = DEFAULT_GPU_RESOURCES_URL
+
     # How long create_jupyter_server follows the hub's spawn progress stream
     # before giving up (the server is left pending, not deleted).
     launch_timeout_seconds: int = 900
@@ -146,6 +158,11 @@ class Settings:
             )
         if sites := os.environ.get("JUPYTERHUB_MCP_SITES"):
             kwargs["sites"] = _split_csv(sites)
+        gpu_resources_url = os.environ.get("JUPYTERHUB_MCP_GPU_RESOURCES_URL")
+        if gpu_resources_url is not None:
+            # An explicit empty value disables the tool; any other value wins
+            # over the default.
+            kwargs["gpu_resources_url"] = gpu_resources_url.rstrip("/") or None
         timeout = _env_positive_int("JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS")
         if timeout is not None:
             kwargs["launch_timeout_seconds"] = timeout

@@ -14,6 +14,13 @@ with the same status codes and JSON shapes as ``jupyterhub/apihandlers``:
   deletes the entry; otherwise it is only stopped)
 - ``/user/<name>/<server>/...`` (the hub proxy), forwarded to an optional
   ASGI app standing in for the notebook's jupyter-mcp-server.
+- ``GET /resources`` (BinderHub's GPU resources endpoint), unauthenticated,
+  shaped as ``{"resources": [ {product, memory, count, total_requests,
+  available}, ... ]}``
+
+The resources endpoint is on a different host than the hub, but the
+``MockTransport`` routes by path only, so one fake serves both. (A real
+deployment points ``gpu_resources_url`` at BinderHub, not the hub.)
 
 Every request is recorded in ``FakeHub.requests`` so tests can assert on the
 exact method, URL, headers, and body the client sent.
@@ -59,6 +66,25 @@ FULL_SCOPES = [
 _SERVER_PATH = re.compile(r"^/hub/api/users/([^/]+)/servers/([^/]*)(/progress)?$")
 _USER_PATH = re.compile(r"^/hub/api/users/([^/]+)$")
 _PROXY_PATH = re.compile(r"^/user/([^/]+)/([^/]+)/")
+
+# Sample GPU availability for the fake BinderHub /resources endpoint, in the
+# endpoint's own shape (memory in MB, counts in whole GPUs).
+GPU_RESOURCES: list[dict[str, Any]] = [
+    {
+        "product": "NVIDIA-A100-SXM4-40GB",
+        "memory": 40960,
+        "count": 4,
+        "total_requests": 3,
+        "available": 1,
+    },
+    {
+        "product": "NVIDIA-GeForce-RTX-2080-Ti",
+        "memory": 11264,
+        "count": 24,
+        "total_requests": 7,
+        "available": 17,
+    },
+]
 
 
 def server_model(
@@ -130,6 +156,12 @@ class FakeHub:
     # Force authenticated requests to these paths (exact, or as a "/"
     # prefix) to fail with the given status, e.g. {"/hub/api/user": 500}.
     fail_paths: dict[str, int] = field(default_factory=dict)
+    # GPU availability the unauthenticated GET /resources endpoint returns.
+    gpu_resources: list[dict[str, Any]] = field(
+        default_factory=lambda: [dict(g) for g in GPU_RESOURCES]
+    )
+    # When set, GET /resources answers with this status and no resources body.
+    resources_status: int = 200
     # Optional factory for the ASGI app standing in for every notebook's /mcp
     # endpoint (see make_notebook_app). A fresh app per request, because an
     # mcp session manager's lifespan can only run once.
@@ -171,6 +203,11 @@ class FakeHub:
 
         if (match := _PROXY_PATH.match(path)) is not None:
             return await self._proxy(request, owner, match.group(1))
+        if path == "/resources" and request.method == "GET":
+            # BinderHub's resources endpoint: unauthenticated, cluster-wide.
+            if self.resources_status != 200:
+                return _error(self.resources_status, "resources unavailable")
+            return httpx2.Response(200, json={"resources": self.gpu_resources})
         if owner is None:
             return _error(403, "Missing or invalid credentials.")
         user, scopes = owner

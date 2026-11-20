@@ -1,4 +1,4 @@
-"""The seven server-lifecycle tools: create/list/get/stop/delete, images, sites.
+"""The eight server-lifecycle tools: create/list/get/stop/delete, images, sites, GPUs.
 
 Owner scoping is strict: the owner of every server is always the hub user
 the caller's own token belongs to (``get_hub_identity``) -- no tool here
@@ -8,6 +8,11 @@ change their own servers.
 
 Servers launched from the BinderHub UI are ordinary named servers of the
 same user, so they show up here (and work with the ``nb_*`` tools) too.
+
+``list_gpu_resources`` is the exception to the per-user, hub-token pattern:
+it reads BinderHub's cluster-wide, unauthenticated ``/resources`` endpoint so
+a caller can pick a ``create_jupyter_server`` ``gpu_product`` that exists and
+is free right now.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from af_jupyterhub_mcp.hub.errors import (
     HubAPIError,
     NameConflictError,
     NotFoundOrNotYoursError,
+    ResourcesError,
     SpawnFailedError,
     SpawnTimeoutError,
 )
@@ -121,6 +127,81 @@ class ListSitesResult(BaseModel):
     sites: list[str]
 
 
+class GpuResourceSummary(BaseModel):
+    """One GPU product's live availability on the local site.
+
+    ``product`` is the ``nvidia.com/gpu.product`` value ``create_jupyter_server``
+    takes as ``gpu_product``. Counts are whole GPUs; ``available`` is ``total``
+    minus ``in_use``.
+    """
+
+    product: str
+    memory_mb: int | None = None
+    total: int | None = None
+    in_use: int | None = None
+    available: int | None = None
+
+
+class ListGpuResourcesResult(BaseModel):
+    """Structured result of list_gpu_resources."""
+
+    gpus: list[GpuResourceSummary]
+
+
+def _int_or_none(value: object) -> int | None:
+    # The endpoint sends whole numbers as JSON ints; the str branch is only a
+    # defensive fallback. bool is an int subclass, so exclude it explicitly.
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _gpu_summary(raw: dict[str, Any]) -> GpuResourceSummary:
+    """Map one BinderHub ``/resources`` entry to a GpuResourceSummary."""
+    return GpuResourceSummary(
+        product=str(raw.get("product")),
+        memory_mb=_int_or_none(raw.get("memory")),
+        total=_int_or_none(raw.get("count")),
+        in_use=_int_or_none(raw.get("total_requests")),
+        available=_int_or_none(raw.get("available")),
+    )
+
+
+def _format_memory(memory_mb: int | None) -> str:
+    if memory_mb is None:
+        return "?"
+    if memory_mb % 1024 == 0:
+        return f"{memory_mb // 1024} GB"
+    return f"{memory_mb} MB"
+
+
+def _format_gpu_table(gpus: list[GpuResourceSummary]) -> str:
+    if not gpus:
+        return "No GPUs are currently available on the local site."
+    lines = [
+        "**GPUs on the local site** (`gpu_product` = Product):",
+        "",
+        "| Product | Memory | Free | In use | Total |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for gpu in sorted(gpus, key=lambda g: g.available or 0, reverse=True):
+        free = "?" if gpu.available is None else str(gpu.available)
+        in_use = "?" if gpu.in_use is None else str(gpu.in_use)
+        total = "?" if gpu.total is None else str(gpu.total)
+        lines.append(
+            f"| {gpu.product} | {_format_memory(gpu.memory_mb)} "
+            f"| {free} | {in_use} | {total} |"
+        )
+    return "\n".join(lines)
+
+
 def _lifespan(ctx: Any) -> tuple[HubClient, Settings]:
     """Return (hub client, settings) from the lifespan context."""
     lc = ctx.request_context.lifespan_context
@@ -147,7 +228,7 @@ async def _summary_of(
 
 
 def register(mcp: MCPServer) -> None:
-    """Register the seven server-lifecycle tools on *mcp*."""
+    """Register the eight server-lifecycle tools on *mcp*."""
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -506,5 +587,68 @@ def register(mcp: MCPServer) -> None:
         payload = ListSitesResult(sites=list(settings.sites))
         return CallToolResult(
             content=[TextContent(type="text", text="\n".join(lines))],
+            structured_content=payload.model_dump(mode="json"),
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List available GPUs",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
+    async def list_gpu_resources(
+        *, ctx: Context[Any, Any]
+    ) -> Annotated[CallToolResult, ListGpuResourcesResult]:
+        """List the GPU models on the local site, with how many of each are free now.
+
+        Call this before create_jupyter_server with gpus > 0 to pick a
+        gpu_product that exists and has a free GPU: each row's Product is the
+        exact value gpu_product takes. The counts are live and cluster-wide
+        (the same data the BinderHub launch page shows), not per user. Only the
+        local site is covered; GPUs on remote sites (e.g. nrp) are not listed.
+        Omitting gpu_product still lets the hub place the server on any GPU.
+        """
+        unavailable_hints = [
+            "GPU selection is unavailable; retry shortly.",
+            (
+                "You can still launch with `create_jupyter_server(gpus=1, ...)`"
+                " and omit `gpu_product` to let the hub pick any GPU."
+            ),
+        ]
+        gpu_resources = ctx.request_context.lifespan_context.get("gpu_resources")
+        if gpu_resources is None:
+            exc = ResourcesError(
+                "the GPU resources endpoint is not configured for this backend"
+            )
+            return format_error(exc, hints=unavailable_hints)
+        try:
+            raw = await gpu_resources.get_gpu_resources()
+        except ResourcesError as exc:
+            return format_error(exc, hints=unavailable_hints)
+        except Exception as exc:  # noqa: BLE001
+            return format_error(exc)
+        gpus = [_gpu_summary(item) for item in raw]
+        text = _format_gpu_table(gpus)
+        if gpus:
+            next_actions = [
+                (
+                    "Use `create_jupyter_server(gpus=1, gpu_product=<Product>, "
+                    "image=<a GPU image from list_supported_images>)` to launch on one."
+                ),
+            ]
+        else:
+            next_actions = [
+                (
+                    "No GPU is free now; retry later, or launch without pinning a model:"
+                    " `create_jupyter_server(gpus=1, ...)` (omit gpu_product to wait for"
+                    " any GPU)."
+                ),
+                "For a CPU-only server, use `create_jupyter_server(gpus=0, ...)`.",
+            ]
+        text = append_next_actions(text, next_actions)
+        payload = ListGpuResourcesResult(gpus=gpus)
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
             structured_content=payload.model_dump(mode="json"),
         )

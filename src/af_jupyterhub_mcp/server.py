@@ -26,6 +26,7 @@ from af_jupyterhub_mcp.observability import (
     ToolCallMiddleware,
     configure_logging,
 )
+from af_jupyterhub_mcp.resources import GpuResourcesClient
 from af_jupyterhub_mcp.tools import jupyterhub as jupyterhub_tools
 from af_jupyterhub_mcp.tools import nb_proxy as nb_proxy_tools
 from af_jupyterhub_mcp.tools import nb_ui as nb_ui_tools
@@ -96,13 +97,27 @@ def make_app(
     """
     hub = HubClient(settings.hub_url, transport=transport)
     verifier = HubTokenVerifier(hub, ttl_seconds=settings.auth_cache_ttl_seconds)
+    # None when gpu_resources_url is unset: list_gpu_resources then returns a
+    # clear "not configured" error instead of making a request.
+    gpu_resources = (
+        GpuResourcesClient(settings.gpu_resources_url, transport=transport)
+        if settings.gpu_resources_url
+        else None
+    )
 
     @asynccontextmanager
     async def _lifespan(_server: MCPServer) -> AsyncGenerator[dict[str, Any], None]:
         try:
-            yield {"settings": settings, "hub": hub, "verifier": verifier}
+            yield {
+                "settings": settings,
+                "hub": hub,
+                "verifier": verifier,
+                "gpu_resources": gpu_resources,
+            }
         finally:
             await hub.aclose()
+            if gpu_resources is not None:
+                await gpu_resources.aclose()
 
     mcp = MCPServer(
         "af-jupyterhub-mcp",

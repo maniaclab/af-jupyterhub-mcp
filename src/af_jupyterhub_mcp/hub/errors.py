@@ -68,3 +68,11 @@ class SpawnFailedError(RuntimeError):
 
 class SpawnTimeoutError(TimeoutError):
     """A server did not become ready within the configured launch timeout."""
+
+
+class ResourcesError(RuntimeError):
+    """A failure fetching or parsing the BinderHub GPU resources endpoint.
+
+    Covers an unreachable endpoint, an error status, and a malformed body --
+    list_gpu_resources turns any of them into one recoverable tool error.
+    """
