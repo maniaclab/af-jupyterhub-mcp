@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from af_jupyterhub_mcp.config import Settings
 
 RESOURCE_URL = "http://127.0.0.1:8000"
-TOOL_COUNT = 76
+TOOL_COUNT = 77
 
 _INITIALIZE = {
     "jsonrpc": "2.0",
@@ -67,7 +67,7 @@ class TestEveryToolDeclaresAnnotationsAndOutputSchema:
     This is the one test that would catch a future tool being added (or an
     existing one refactored) without following the
     ``Annotated[CallToolResult, Model]`` + ``ToolAnnotations`` pattern all
-    76 tools use today -- see CLAUDE.md's "Tool registration pattern".
+    77 tools use today -- see CLAUDE.md's "Tool registration pattern".
     """
 
     def test_every_tool_declares_annotations_and_output_schema(self) -> None:

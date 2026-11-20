@@ -11,6 +11,7 @@ from mcp.types import TextContent
 from af_jupyterhub_mcp.auth.hub import HubTokenVerifier
 from af_jupyterhub_mcp.config import Settings
 from af_jupyterhub_mcp.hub.client import HubClient
+from af_jupyterhub_mcp.resources import GpuResourcesClient
 from tests.fakes import ALICE_TOKEN, HUB_URL, FakeHub, make_notebook_app
 
 if TYPE_CHECKING:
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
 CPU_IMAGE = "hub.opensciencegrid.org/usatlas/ml-platform-cpu:latest"
 GPU_IMAGE = "hub.opensciencegrid.org/usatlas/ml-platform-gpu:latest"
 PUBLIC_HUB_URL = "https://jupyterhub.example.org"
+# BinderHub resources endpoint on a distinct host from the hub; the fake's
+# MockTransport routes by path, so one fake serves both.
+GPU_RESOURCES_URL = "https://binder.example.org/resources"
 
 
 @pytest.fixture
@@ -55,6 +59,14 @@ async def hub(fake_hub: FakeHub) -> AsyncIterator[HubClient]:
 
 
 @pytest.fixture
+async def gpu_resources(fake_hub: FakeHub) -> AsyncIterator[GpuResourcesClient]:
+    """A GpuResourcesClient wired to ``fake_hub``'s /resources endpoint."""
+    client = GpuResourcesClient(GPU_RESOURCES_URL, transport=fake_hub.transport())
+    yield client
+    await client.aclose()
+
+
+@pytest.fixture
 def settings() -> Settings:
     """Settings pointing at the fake hub, with links on a distinct public URL."""
     return Settings(
@@ -64,19 +76,28 @@ def settings() -> Settings:
         gpu_images=(GPU_IMAGE,),
         sites=("local", "ssl"),
         launch_timeout_seconds=5,
+        gpu_resources_url=GPU_RESOURCES_URL,
     )
 
 
 @pytest.fixture
-def make_ctx(hub: HubClient, settings: Settings) -> Callable[..., MagicMock]:
+def make_ctx(
+    hub: HubClient, gpu_resources: GpuResourcesClient, settings: Settings
+) -> Callable[..., MagicMock]:
     """Return a factory for a tool Context carrying a bearer and the lifespan state.
 
     ``report_progress`` is an AsyncMock so tests can assert on the progress
-    notifications a tool sent.
+    notifications a tool sent. Pass ``gpu_resources_override`` to replace the
+    resources client (e.g. ``None`` to test the "not configured" path).
     """
 
+    _UNSET = object()
+
     def _make_ctx(
-        *, token: str = ALICE_TOKEN, settings_override: Settings | None = None
+        *,
+        token: str = ALICE_TOKEN,
+        settings_override: Settings | None = None,
+        gpu_resources_override: Any = _UNSET,
     ) -> MagicMock:
         ctx = MagicMock()
         ctx.request_context.request.headers = {"authorization": f"Bearer {token}"}
@@ -84,6 +105,11 @@ def make_ctx(hub: HubClient, settings: Settings) -> Callable[..., MagicMock]:
             "settings": settings_override or settings,
             "hub": hub,
             "verifier": HubTokenVerifier(hub, ttl_seconds=60),
+            "gpu_resources": (
+                gpu_resources
+                if gpu_resources_override is _UNSET
+                else gpu_resources_override
+            ),
         }
         ctx.request_context.lifespan_context = lifespan
         ctx.report_progress = AsyncMock()

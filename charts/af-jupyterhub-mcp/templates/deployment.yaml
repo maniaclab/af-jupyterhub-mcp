@@ -90,6 +90,10 @@ spec:
             {{- end }}
             - name: JUPYTERHUB_MCP_SITES
               value: {{ .Values.notebook.sites | join "," | quote }}
+            {{- with .Values.gpuResources.url }}
+            - name: JUPYTERHUB_MCP_GPU_RESOURCES_URL
+              value: {{ . | quote }}
+            {{- end }}
             - name: JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS
               value: {{ .Values.notebook.launchTimeoutSeconds | int64 | quote }}
             - name: JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES

@@ -4,7 +4,7 @@ icon: lucide/wrench
 
 # Tools
 
-76 tools in three groups. Every tool's MCP `annotations` declare whether it is
+77 tools in three groups. Every tool's MCP `annotations` declare whether it is
 read-only, mutating, or destructive; the Kind column mirrors that. Every tool
 returns markdown plus `structured_content` validated against a published
 `outputSchema`. Errors come back as `is_error` results with recovery hints.
@@ -20,6 +20,7 @@ returns markdown plus `structured_content` validated against a published
 | `delete_jupyter_server` | Stop a server and remove its entry                               | destructive |
 | `list_supported_images` | List the CPU and GPU images `create_jupyter_server` accepts      | read-only   |
 | `list_sites`            | List the site names `create_jupyter_server` accepts              | read-only   |
+| `list_gpu_resources`    | List the GPU models on the local site and how many are free now  | read-only   |
 
 The owner of every server is always the hub user the caller's token belongs to.
 No tool takes an owner argument.
@@ -69,6 +70,37 @@ returns when the hub reports ready, and fails if the hub reports failure or the
 launch timeout passes (900 s by default). After a timeout the server keeps
 spawning and is not deleted. The result includes the server's JupyterLab URL on
 the public hub.
+
+### Choosing a GPU (`list_gpu_resources`)
+
+`create_jupyter_server`'s `gpu_product` is an `nvidia.com/gpu.product` value,
+which the spawner turns into a node selector — so a value with no matching node
+leaves the server unschedulable. `list_gpu_resources` lists the GPU products
+that exist on the **local** site and how many of each are free right now, so a
+caller can pick a `gpu_product` that will actually schedule. Each row's Product
+is the exact string `gpu_product` takes.
+
+It reads BinderHub's `/resources` endpoint (`JUPYTERHUB_MCP_GPU_RESOURCES_URL`,
+see [Configuration](configuration.md)) — the same cluster-wide, unauthenticated
+view the BinderHub launch page shows, so no hub token is sent and the numbers
+are not per user. Remote sites (`ssl`, `nrp`) are not covered; omit
+`gpu_product` to let the hub place the server on any GPU. If the endpoint is
+unreachable or unset, the tool returns a clear error and you can still launch
+with `gpus > 0` and no pinned model.
+
+```json
+{
+  "gpus": [
+    {
+      "product": "NVIDIA-A100-SXM4-40GB",
+      "memory_mb": 40960,
+      "total": 4,
+      "in_use": 3,
+      "available": 1
+    }
+  ]
+}
+```
 
 ### Named-server limit
 

@@ -18,12 +18,13 @@ BinderHub: every launch, lookup, stop, and notebook call goes through the
 JupyterHub REST API and hub proxy with the caller's own hub token, so servers on
 remote sites (`ssl`, `nrp`) work the same as local ones.
 
-Seven lifecycle tools (`tools/jupyterhub.py`) manage named servers. Seventeen
-`nb_*` tools (`tools/nb_proxy.py`) proxy to the Datalayer `jupyter-mcp-server`
-running inside the server, at `{hub_url}/user/<name>/<server>/mcp`. Fifty-two
-`nb_ui_*` tools (`tools/nb_ui.py`) proxy JupyterLab frontend commands served by
-the `jupyter-mcp-tools` extension; these run inside the user's open JupyterLab
-tab and fail without one. 76 tools in total.
+Eight lifecycle tools (`tools/jupyterhub.py`) manage named servers (seven for
+the server lifecycle plus `list_gpu_resources`). Seventeen `nb_*` tools
+(`tools/nb_proxy.py`) proxy to the Datalayer `jupyter-mcp-server` running inside
+the server, at `{hub_url}/user/<name>/<server>/mcp`. Fifty-two `nb_ui_*` tools
+(`tools/nb_ui.py`) proxy JupyterLab frontend commands served by the
+`jupyter-mcp-tools` extension; these run inside the user's open JupyterLab tab
+and fail without one. 77 tools in total.
 
 ## Project layout
 

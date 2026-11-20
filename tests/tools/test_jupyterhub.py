@@ -1,4 +1,4 @@
-"""Tests for the seven server-lifecycle tools in tools/jupyterhub.py."""
+"""Tests for the eight server-lifecycle tools in tools/jupyterhub.py."""
 
 from __future__ import annotations
 
@@ -44,11 +44,12 @@ class TestRegistration:
         "get_jupyter_server",
         "list_supported_images",
         "list_sites",
+        "list_gpu_resources",
     }
     _MUTATING: ClassVar[set[str]] = {"create_jupyter_server"}
     _DESTRUCTIVE: ClassVar[set[str]] = {"stop_jupyter_server", "delete_jupyter_server"}
 
-    def test_registers_exactly_the_seven_tools(self) -> None:
+    def test_registers_exactly_the_eight_tools(self) -> None:
         mcp = MCPServer("test")
         jupyterhub_tools.register(mcp)
         names = {t.name for t in mcp._tool_manager.list_tools()}
@@ -461,6 +462,87 @@ class TestStaticListings:
         result = await tools["list_sites"](ctx=make_ctx())
         assert result.structured_content == {"sites": ["local", "ssl"]}
         assert "- ssl" in tool_text(result)
+
+
+class TestListGpuResources:
+    async def test_lists_products_with_availability(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        tool_text: Callable[[CallToolResult], str],
+    ) -> None:
+        result = await tools["list_gpu_resources"](ctx=make_ctx())
+        assert result.is_error is not True, tool_text(result)
+        gpus = result.structured_content["gpus"]
+        by_product = {g["product"]: g for g in gpus}
+        assert by_product["NVIDIA-A100-SXM4-40GB"] == {
+            "product": "NVIDIA-A100-SXM4-40GB",
+            "memory_mb": 40960,
+            "total": 4,
+            "in_use": 3,
+            "available": 1,
+        }
+        text = tool_text(result)
+        # Memory that is a whole number of GB is shown as GB.
+        assert "40 GB" in text
+        # Rows are sorted by free count, so the RTX (17 free) precedes the A100 (1).
+        assert text.index("RTX-2080-Ti") < text.index("A100-SXM4-40GB")
+        # The next-action points at create_jupyter_server with gpu_product.
+        assert "gpu_product" in text
+        # O2: the text carries every structuredContent field, including in_use.
+        assert "In use" in text
+
+    async def test_no_token_is_sent_to_the_resources_endpoint(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        fake_hub: FakeHub,
+    ) -> None:
+        await tools["list_gpu_resources"](ctx=make_ctx())
+        resources_reqs = [r for r in fake_hub.requests if r.url.path == "/resources"]
+        assert resources_reqs, "the tool did not call /resources"
+        assert "authorization" not in resources_reqs[-1].headers
+
+    async def test_empty_availability_is_a_clear_message(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        fake_hub: FakeHub,
+        tool_text: Callable[[CallToolResult], str],
+    ) -> None:
+        fake_hub.gpu_resources = []
+        result = await tools["list_gpu_resources"](ctx=make_ctx())
+        assert result.is_error is not True
+        assert result.structured_content == {"gpus": []}
+        text = tool_text(result)
+        assert "No GPUs" in text
+        # E2: an empty result must still name a next step.
+        assert "create_jupyter_server" in text
+
+    async def test_endpoint_error_is_formatted_with_a_fallback_hint(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        fake_hub: FakeHub,
+        tool_text: Callable[[CallToolResult], str],
+    ) -> None:
+        fake_hub.resources_status = 503
+        result = await tools["list_gpu_resources"](ctx=make_ctx())
+        assert result.is_error is True
+        # Still launchable without a pinned model.
+        assert "gpu_product" in tool_text(result)
+
+    async def test_not_configured_is_a_clear_error(
+        self,
+        tools: dict[str, ToolFn],
+        make_ctx: Callable[..., MagicMock],
+        tool_text: Callable[[CallToolResult], str],
+    ) -> None:
+        result = await tools["list_gpu_resources"](
+            ctx=make_ctx(gpu_resources_override=None)
+        )
+        assert result.is_error is True
+        assert "not configured" in tool_text(result)
 
 
 _HUB_CALLING: list[tuple[str, dict[str, Any], str]] = [

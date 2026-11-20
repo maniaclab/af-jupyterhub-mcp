@@ -12,7 +12,7 @@ icon: lucide/rocket
 
 ## Next
 
-- [Tools](tools.md): all 76 tools.
+- [Tools](tools.md): all 77 tools.
 - [Configuration](configuration.md): settings, environment variables, and CLI
   flags.
 - [Deployment](deployment.md): the JupyterHub service, af-mcp-platform wiring,

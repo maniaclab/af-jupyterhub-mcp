@@ -20,6 +20,7 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "JUPYTERHUB_MCP_GPU_IMAGES",
         "JUPYTERHUB_MCP_IMAGE_TOOL_OVERRIDES",
         "JUPYTERHUB_MCP_SITES",
+        "JUPYTERHUB_MCP_GPU_RESOURCES_URL",
         "JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS",
         "JUPYTERHUB_MCP_AUTH_CACHE_TTL_SECONDS",
         "JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES",
@@ -39,6 +40,11 @@ class TestDefaults:
 
     def test_sites_default_to_local(self) -> None:
         assert Settings().sites == ("local",)
+
+    def test_gpu_resources_url_defaults_to_af_binderhub(self) -> None:
+        assert Settings().gpu_resources_url == (
+            "https://binderhub.af.uchicago.edu/resources"
+        )
 
     def test_timeouts_and_ttls(self) -> None:
         settings = Settings()
@@ -68,6 +74,20 @@ class TestFromEnv:
     def test_sites_are_comma_separated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("JUPYTERHUB_MCP_SITES", "local,ssl,nrp")
         assert Settings.from_env().sites == ("local", "ssl", "nrp")
+
+    def test_gpu_resources_url_trailing_slash_is_stripped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(
+            "JUPYTERHUB_MCP_GPU_RESOURCES_URL", "http://binder.svc/resources/"
+        )
+        assert Settings.from_env().gpu_resources_url == "http://binder.svc/resources"
+
+    def test_empty_gpu_resources_url_disables_the_tool(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JUPYTERHUB_MCP_GPU_RESOURCES_URL", "")
+        assert Settings.from_env().gpu_resources_url is None
 
     def test_integer_knobs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS", "120")

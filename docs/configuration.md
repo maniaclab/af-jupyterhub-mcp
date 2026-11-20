@@ -16,6 +16,7 @@ from a value.
 | `JUPYTERHUB_MCP_GPU_IMAGES`                   | `notebook.images.gpu`                | `hub.opensciencegrid.org/usatlas/ml-platform-gpu:latest` | Comma-separated images allowed with `gpus>0`                                                                                        |
 | `JUPYTERHUB_MCP_IMAGE_TOOL_OVERRIDES`         | `notebook.images.toolOverrides`      | none                                                     | JSON `{"<image>": ["<upstream tool id>", ...]}`; see [Tools](tools.md#images-with-different-tool-sets)                              |
 | `JUPYTERHUB_MCP_SITES`                        | `notebook.sites`                     | `local`                                                  | Comma-separated site names `create_jupyter_server` accepts                                                                          |
+| `JUPYTERHUB_MCP_GPU_RESOURCES_URL`            | `gpuResources.url`                   | `https://binderhub.af.uchicago.edu/resources`            | BinderHub GPU resources endpoint `list_gpu_resources` reads; empty disables the tool                                                |
 | `JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_BYTES`       | `notebook.imageOutput.maxBytes`      | `1048576`                                                | Largest single figure (decoded bytes) an `nb_*` call returns as image content; larger ones are replaced by an "omitted" text marker |
 | `JUPYTERHUB_MCP_IMAGE_OUTPUT_MAX_TOTAL_BYTES` | `notebook.imageOutput.maxTotalBytes` | `4194304`                                                | Total of figures returned as image content by one `nb_*` call                                                                       |
 | `JUPYTERHUB_MCP_LAUNCH_TIMEOUT_SECONDS`       | `notebook.launchTimeoutSeconds`      | `900`                                                    | How long `create_jupyter_server` follows the spawn progress                                                                         |
@@ -34,10 +35,10 @@ public hub. Outside the cluster, leave the public URL unset.
 ## Images
 
 Every allowlisted image must include `jupyterhub-singleuser`, or the hub cannot
-start it; ml_platform images have it since
+start it; ml*platform images have it since
 [maniaclab/ml_platform#21](https://github.com/maniaclab/ml_platform/pull/21).
-The `nb_*` tools also need `jupyter-mcp-server`, and the `nb_ui_*` tools need
-`jupyter-mcp-tools` with each command allowlisted.
+The `nb*_`tools also need`jupyter-mcp-server`, and the `nb*ui*_`tools
+need`jupyter-mcp-tools` with each command allowlisted.
 
 ## Sites
 
@@ -45,6 +46,17 @@ The hub spawner (`binderspawner_mixin.py`) matches `resource_requests.site`
 against the BinderHub `sites` list (`UC AF`, `ssl`, `nrp`) and falls back to the
 local site for any name it does not recognise. The default `local` therefore
 always works and lands on UC AF.
+
+## GPU resources
+
+`list_gpu_resources` reads BinderHub's `/resources` endpoint
+(`JUPYTERHUB_MCP_GPU_RESOURCES_URL`) so a caller can pick a
+`create_jupyter_server` `gpu_product` that exists on the local site and is free
+right now. It is a cluster-wide, unauthenticated view (no hub token is sent),
+and reflects the local site only. In the cluster, point it at the binder
+Service, e.g. `http://binderhub.binderhub.svc.cluster.local/resources`, the same
+way `JUPYTERHUB_MCP_HUB_URL` points at the hub's Service. Set the value to empty
+to turn the tool off (it then returns a clear "not configured" error).
 
 ## Fixed guardrails
 

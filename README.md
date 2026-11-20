@@ -33,9 +33,9 @@ backend never talks to Kubernetes or BinderHub. Servers launched from the
 BinderHub UI are ordinary named servers of the same user, so they show up and
 work here too.
 
-Launched images must include `jupyterhub-singleuser` (ml_platform has since
+Launched images must include `jupyterhub-singleuser` (ml*platform has since
 [#21](https://github.com/maniaclab/ml_platform/pull/21)) and
-`jupyter-mcp-server` (plus `jupyter-mcp-tools` for the `nb_ui_*` tools).
+`jupyter-mcp-server` (plus `jupyter-mcp-tools` for the `nb_ui*\*` tools).
 
 <!-- --8<-- [end:architecture] -->
 
@@ -65,7 +65,7 @@ Launched images must include `jupyterhub-singleuser` (ml_platform has since
 
 ## Tools
 
-76 tools: seven for the server lifecycle, 17 `nb_*` notebook tools, and 52
+77 tools: eight for the server lifecycle, 17 `nb_*` notebook tools, and 52
 `nb_ui_*` JupyterLab UI tools. See [docs/tools.md](docs/tools.md) for the full
 reference.
 
